@@ -1,89 +1,239 @@
-### Objective
+# The Orc Shack
 
-Your assignment is to implement a REST API for a restaurant.
+## Introduction
 
-### Brief
+A restaurant management platform built with Go (REST API) and React (SPA frontend). Restaurant owners can register their establishment, manage dishes, and collect customer ratings. Customers can browse, search, and rate dishes.
 
-Frogo Baggins, a hobbit from the Shire, has a great idea. He wants to build a restaurant that serves traditional dishes from the world of Middle Earth. The restaurant will be called "**The Orc Shack**" and will have a cozy atmosphere.
+## Quick Start
 
-Frogo has hired you to build the website for his restaurant. As payment, he has offered you either a chest of gold or a ring. Choose wisely.
+### Prerequisites
 
-### Tasks (Specifications)
+- [Go](https://go.dev/dl/) 1.25+
+- [Node.js](https://nodejs.org/) 18+ and [Yarn](https://yarnpkg.com/) (`npm install -g yarn`)
+- [Docker](https://www.docker.com/) and Docker Compose
 
-This assignment has 4 tasks, which you can attempt based on your level of experience. We expect candidates applying for a Junior engineer positions to complete at least the first task, Intermediate engineers must also complete the second task, and finally, seniors must also complete the 3rd task. Lastly there are some ideas in the 4th task for engineers who want to go above and beyond.
+### One-Command Start
 
+To start the entire stack (infrastructure, bootstrap, API server, and UI) in one go:
 
-#### Task 1 (All Candidates):
+```shell
+./scripts/start.sh
+```
 
-Deliver a REST API that meets the following requirements:
-- An API user must be able to:
-    - Create, View, List, Update, and Delete dishes.
-    - Dishes must have a name, description, price, and image.
+This will start MongoDB, Redis, Prometheus, Grafana, seed the database, launch the Go API on `:8080`, and the React UI on `:5173`. Press `Ctrl+C` to stop everything.
 
-- Customers must be able to take the following actions:
-    - Search, View, and Rate dishes
+---
 
-*Junior engineers do not _need_ to worry about users or authentication.*
+If you prefer to start each component manually, follow the steps below.
 
+### 1. Start Infrastructure
 
-#### Task 2 (Intermediate & Senior)
-- Add user, permission, and authentication support.
-- Users must be able to register and login.
-- All functionality of the API must require a logged in user (except Registration)
-- At a minimum, the system should support password based authentication.
-- Users must have a name and email address and password.
-- Add validation to the data entities in the API.
-- An Evil Orc is attempting to brute force passwords for known email addresses. Add functionality to defend against this. (You can use any methodology that you deem suitable)
+From the project root, bring up MongoDB and Redis:
 
+```shell
+docker-compose up -d
+```
 
-#### Task 3 (Senior)
+This starts:
+- MongoDB on `localhost:27017`
+- Redis on `localhost:6379`
+- Prometheus on `localhost:9090`
+- Grafana on `localhost:3000` (admin/admin; Prometheus datasource auto-provisioned)
 
-- The API is running on an old Shire Server that is starting to struggle with the load of the now popular website. Implement a solution to improve the performance of the API on the same hardware. 
-- Add support for multiple different restaurants to use the product (multi-tenant SaaS)
+### 2. Bootstrap the Database
 
+Seed the database with a root user, a sample restaurant, and sample dishes, and create all indexes:
 
-#### Task 4 (Above and Beyond)
+```shell
+go run ./cmd/bootstrap
+```
 
-- The evil Orc has created many sockpuppet accounts and has left many bad reviews. Use an AI/ML solution to provide a sentiment score for each review.
-- To prevent abuse, add rate-limiting per logged in customer.
-- Allow users to login using OAuth2 based SSO (Google, etc)
+This creates a **root user** for testing purposes:
 
-### Constraints
+| Field | Value |
+|-------|-------|
+| Email | `root+user@gmail.com` |
+| Password | `abc123` |
+| ID | `00000000-0000-0000-0000-000000000000` |
+| Roles | Admin, RestaurantOwner |
 
-- At Bash we make extensive use of Golang so first prize will always be to use Golang for your assignment.
-- Alternative languages we will accept are Python (preferably fastapi), or JS/Typescript
-- Implement a REST API utilizing JSON for request and response bodies where applicable.
+Expected output:
+```
+cleared users collection
+root user created: root+user@gmail.com (00000000-0000-0000-0000-000000000000)
+cleared restaurants collection
+seed restaurant created: The Dancing Pony (00000000-0000-0000-0000-000000000001)
+cleared dishes collection
+dish created: Lembas Bread (00000000-0000-0000-0000-000000000101)
+dish created: Shire Mushroom Stew (00000000-0000-0000-0000-000000000102)
+dish created: Second Breakfast Platter (00000000-0000-0000-0000-000000000103)
+index ensured: users.id (unique=true)
+index ensured: users.email (unique=true)
+...
+```
 
-### Tips, Advice, Guidance
+### 3. Start the API Server
 
-- You are encouraged to make use of a web framework, SQL ORM, etc. This will help reduce the overhead of writing boilerplate code, and will let you focus on the core requirements.
-- You are welcome to make use of AI to help write the code.
-- This assessment is open ended, and candidates could spend weeks crafting the perfect API. We encourage you to timebox yourself, and limit the amount of time you spend. When we talk through the assessment, this can be provided as an input, and it is good to talk about the trade-offs made given the time constraint. We recommend about 6-8 hours of focused time.
+```shell
+go run ./cmd/app
+```
 
-### Evaluation Criteria
+The API starts on `http://localhost:8080`. Verify with:
 
-The test will be evaluated based on functional and non-functional requirements.
+```shell
+curl http://localhost:8080/health
+```
 
-For functional requirements, your API needs to work, and meet the requirements as provided for your level.
+### 4. Start the Frontend
 
-For non-functional requirements, your API needs to be production-ready to a reasonable extent. We are looking for adherence to qualities such as testability, maintainability, observability, and security.
+In a separate terminal:
 
-### Supporting Assets
+```shell
+cd web
+yarn install
+yarn dev
+```
 
-You've been provided with a docker-compose file which will bring up a postgres database and prometheus. These are optional and provided to help get started.
+The frontend starts on `http://localhost:5173` and proxies API calls to the backend.
 
-#### Postgres
+## How It Works
 
-You can connect to the database via localhost:5432 using the username and password configured in the docker-compose.yml.
+### Architecture
 
-#### Prometheus
+```
+Browser (React SPA)
+    |
+    | /api/v1/* (proxied by Vite in dev)
+    v
+Go HTTP Server (gorilla/mux)
+    |
+    |-- Logger Middleware
+    |-- Auth Middleware (JWT via Firebase)
+    |-- User Rate Limiter Middleware (Redis token bucket, per-user)
+    |
+    |-- IP Rate Limiter Middleware (Redis token bucket, per-IP, login only)
+    |
+    |-- REST Adaptors (HTTP <-> Service translation)
+    |       |
+    |       v
+    |-- Service Layer (business logic, interfaces in pkg/, impl in internal/)
+    |       |
+    |       v
+    |-- MongoDB Store (data access)
+    |
+    v
+MongoDB          Redis
+(data)           (rate limiting state)
+```
 
-You can configure prometheus via the provided prometheus.yml file.
+### API Endpoints
 
-### CodeSubmit
+**Unauthenticated:**
 
-Please organise, design, test, and document your code as if it were going into production - then push your changes to the Main branch. After you have pushed your code, you may submit the assignment on the assignment page.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Health check |
+| GET | `/metrics` | Prometheus metrics scrape endpoint |
+| POST | `/api/v1/auth/login` | Login with email/password (IP rate-limited) |
+| POST | `/api/v1/auth/firebase` | Login with Firebase token |
+| POST | `/api/v1/auth/register` | Register with email/password |
+| POST | `/api/v1/auth/register/firebase` | Register with Firebase token |
 
-Best of luck, and happy coding!
+**Authenticated** (require JWT via `Authorization: Bearer` header or `access_token` cookie):
 
-The Bash Team
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/restaurants` | List all restaurants |
+| GET | `/api/v1/restaurants/mine` | Get my restaurant |
+| GET | `/api/v1/restaurants/search?q=` | Search restaurants |
+| GET | `/api/v1/restaurants/{id}` | Get restaurant by ID |
+| POST | `/api/v1/restaurants/register` | Register a new restaurant |
+| GET | `/api/v1/dishes` | List dishes (optionally `?restaurant_id=`) |
+| GET | `/api/v1/dishes/search?q=` | Search dishes |
+| GET | `/api/v1/dishes/{id}` | Get dish by ID |
+| POST | `/api/v1/dishes` | Create dish (owner only) |
+| PUT | `/api/v1/dishes/{id}` | Update dish (owner only) |
+| DELETE | `/api/v1/dishes/{id}` | Delete dish (owner only) |
+| GET | `/api/v1/dishes/{id}/ratings` | List ratings for a dish |
+| POST | `/api/v1/dishes/{id}/ratings` | Submit a rating |
+| GET | `/api/v1/users` | List users |
+| GET | `/api/v1/users/search?q=` | Search users |
+| GET | `/api/v1/users/{email}` | Get user by email |
+
+### Authentication
+
+- Firebase handles identity (email/password and Google OAuth)
+- The API issues its own JWT; the token can be provided in two ways:
+  - **Cookie:** `access_token` (set automatically by the login/register endpoints as an HttpOnly cookie)
+  - **Header:** `Authorization: Bearer <token>`
+- All authenticated routes validate the JWT via middleware
+- The middleware checks the `Authorization` header first, then falls back to the cookie
+
+### Authorization
+
+- Users start with the `Customer` role
+- Registering a restaurant promotes the user to `RestaurantOwner`
+- Dish create/update/delete verifies the caller is the owner of the target restaurant
+
+### Rate Limiting
+
+Two layers of rate limiting, both Redis-backed token buckets (via `mennanov/limiters`):
+
+**User Rate Limiter** (`UserRateLimiterMiddleware`)
+- Per-user, keyed by UserID from the JWT
+- Applied to all authenticated routes
+- Default: 20 requests burst, 1 token/second refill
+
+**IP Rate Limiter** (`IpRateLimiterMiddleware`)
+- Per-IP, keyed by client IP address
+- Applied to `/api/v1/auth/login` only
+- Default: 5 requests burst, 1 token/minute refill
+- Protects against brute-force login attempts
+
+### Observability
+
+The API exposes Prometheus metrics at `/metrics`, recorded by middleware in `pkg/metrics`:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `http_requests_total` | Counter | `method`, `route`, `status` |
+| `http_request_duration_seconds` | Histogram | `method`, `route` |
+| `http_requests_in_flight` | Gauge | — |
+
+The `route` label uses the gorilla/mux path template (e.g. `/api/v1/dishes/{id}`) to keep cardinality bounded.
+
+Prometheus scrapes the API every 15s (config in `observability/prometheus/prometheus.yml`); targets are visible at http://localhost:9090/targets. Grafana (http://localhost:3000) has the Prometheus datasource auto-provisioned via `observability/grafana/provisioning/`.
+
+## Running Tests
+
+```shell
+go test ./... -v
+```
+
+## Project Structure
+
+```
+cmd/
+  app/              # API server entry point and wiring
+  bootstrap/        # Database seed and index creation
+internal/pkg/       # Private service implementations
+  authentication/   # Firebase + JWT auth
+  rateLimiting/     # Redis rate limiter implementation
+  restaurants/      # Restaurant, dish, rating services
+  users/            # User services
+pkg/                # Public interfaces and adaptors
+  authentication/   # Auth interfaces, middleware, REST adaptors
+  errs/             # Sentinel errors (ErrNotFound, ErrConflict, ErrForbidden)
+  logger/           # Logging middleware
+  metrics/          # Prometheus middleware and /metrics handler
+  mongo/            # MongoDB client, store abstraction, Storer interface
+  rateLimiting/     # Rate limiter interfaces, middleware
+  restaurants/      # Restaurant/dish/rating interfaces, REST adaptors
+  users/            # User interfaces, REST adaptors
+web/                # React frontend (Vite + TypeScript)
+  src/api/          # API client layer
+  src/components/   # UI components
+  src/context/      # Auth context provider
+  src/hooks/        # Custom React hooks
+  src/pages/        # Page components
+```
