@@ -7,6 +7,7 @@ import (
 
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/authentication"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/logger"
+	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/metrics"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/rateLimiting"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/restaurants"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/users"
@@ -19,6 +20,10 @@ func setupCommunications(serviceProviders ServiceProviders) {
 
 	router := mux.NewRouter()
 	router.Use(logger.Middleware)
+	router.Use(metrics.Middleware)
+
+	// prometheus scrape endpoint
+	router.Handle("/metrics", metrics.Handler()).Methods(http.MethodGet)
 
 	// health check
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

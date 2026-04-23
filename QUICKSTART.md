@@ -20,7 +20,7 @@ To start the entire stack (infrastructure, bootstrap, API server, and UI) in one
 ./scripts/start.sh
 ```
 
-This will start MongoDB, Redis, seed the database, launch the Go API on `:8080`, and the React UI on `:5173`. Press `Ctrl+C` to stop everything.
+This will start MongoDB, Redis, Prometheus, Grafana, seed the database, launch the Go API on `:8080`, and the React UI on `:5173`. Press `Ctrl+C` to stop everything.
 
 ---
 
@@ -37,6 +37,8 @@ docker-compose up -d
 This starts:
 - MongoDB on `localhost:27017`
 - Redis on `localhost:6379`
+- Prometheus on `localhost:9090`
+- Grafana on `localhost:3000` (admin/admin; Prometheus datasource auto-provisioned)
 
 ### 2. Bootstrap the Database
 
@@ -131,6 +133,7 @@ MongoDB          Redis
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
+| GET | `/metrics` | Prometheus metrics scrape endpoint |
 | POST | `/api/v1/auth/login` | Login with email/password (IP rate-limited) |
 | POST | `/api/v1/auth/firebase` | Login with Firebase token |
 | POST | `/api/v1/auth/register` | Register with email/password |
@@ -187,6 +190,20 @@ Two layers of rate limiting, both Redis-backed token buckets (via `mennanov/limi
 - Default: 5 requests burst, 1 token/minute refill
 - Protects against brute-force login attempts
 
+### Observability
+
+The API exposes Prometheus metrics at `/metrics`, recorded by middleware in `pkg/metrics`:
+
+| Metric | Type | Labels |
+|--------|------|--------|
+| `http_requests_total` | Counter | `method`, `route`, `status` |
+| `http_request_duration_seconds` | Histogram | `method`, `route` |
+| `http_requests_in_flight` | Gauge | — |
+
+The `route` label uses the gorilla/mux path template (e.g. `/api/v1/dishes/{id}`) to keep cardinality bounded.
+
+Prometheus scrapes the API every 15s (config in `observability/prometheus/prometheus.yml`); targets are visible at http://localhost:9090/targets. Grafana (http://localhost:3000) has the Prometheus datasource auto-provisioned via `observability/grafana/provisioning/`.
+
 ## Running Tests
 
 ```shell
@@ -208,6 +225,7 @@ pkg/                # Public interfaces and adaptors
   authentication/   # Auth interfaces, middleware, REST adaptors
   errs/             # Sentinel errors (ErrNotFound, ErrConflict, ErrForbidden)
   logger/           # Logging middleware
+  metrics/          # Prometheus middleware and /metrics handler
   mongo/            # MongoDB client, store abstraction, Storer interface
   rateLimiting/     # Rate limiter interfaces, middleware
   restaurants/      # Restaurant/dish/rating interfaces, REST adaptors
