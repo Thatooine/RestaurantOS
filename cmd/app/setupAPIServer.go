@@ -50,39 +50,35 @@ func setupAPIServer(serviceProviders ServiceProviders) {
 
 	// user routes
 
-	userReaderAdaptor := users.NewUserReaderServiceRESTAdaptor(serviceProviders.UserReaderService)
-	api.HandleFunc("/users", userReaderAdaptor.ListUsers).Methods(http.MethodGet)
-	api.HandleFunc("/users/search", userReaderAdaptor.SearchUsers).Methods(http.MethodGet)
-	api.HandleFunc("/users/{email}", userReaderAdaptor.GetUser).Methods(http.MethodGet)
+	userServiceAdaptor := users.NewUserServiceRESTAdaptor(serviceProviders.UserService)
+	api.HandleFunc("/users", userServiceAdaptor.ListUsers).Methods(http.MethodGet)
+	api.HandleFunc("/users/search", userServiceAdaptor.SearchUsers).Methods(http.MethodGet)
+	api.HandleFunc("/users/{email}", userServiceAdaptor.GetUser).Methods(http.MethodGet)
 
 	// restaurant routes
 
 	restaurantRegistrationAdaptor := restaurants.NewRestaurantRegistrationRESTAdaptor(serviceProviders.RestaurantRegistrationService)
 	api.HandleFunc("/restaurants/register", restaurantRegistrationAdaptor.RegisterRestaurant).Methods(http.MethodPost)
 
-	restaurantReaderAdaptor := restaurants.NewRestaurantReaderServiceRESTAdaptor(serviceProviders.RestaurantReaderService)
-	api.HandleFunc("/restaurants", restaurantReaderAdaptor.ListRestaurants).Methods(http.MethodGet)
-	api.HandleFunc("/restaurants/mine", restaurantReaderAdaptor.GetMyRestaurant).Methods(http.MethodGet)
-	api.HandleFunc("/restaurants/search", restaurantReaderAdaptor.SearchRestaurants).Methods(http.MethodGet)
-	api.HandleFunc("/restaurants/{id}", restaurantReaderAdaptor.GetRestaurant).Methods(http.MethodGet)
+	restaurantServiceAdaptor := restaurants.NewRestaurantServiceRESTAdaptor(serviceProviders.RestaurantService)
+	api.HandleFunc("/restaurants", restaurantServiceAdaptor.ListRestaurants).Methods(http.MethodGet)
+	api.HandleFunc("/restaurants/mine", restaurantServiceAdaptor.GetMyRestaurant).Methods(http.MethodGet)
+	api.HandleFunc("/restaurants/search", restaurantServiceAdaptor.SearchRestaurants).Methods(http.MethodGet)
+	api.HandleFunc("/restaurants/{id}", restaurantServiceAdaptor.GetRestaurant).Methods(http.MethodGet)
 
 	// dish routes
-	dishWriterAdaptor := restaurants.NewDishWriterServiceRESTAdaptor(serviceProviders.DishWriterService)
-	api.HandleFunc("/dishes", dishWriterAdaptor.CreateDish).Methods(http.MethodPost)
-	api.HandleFunc("/dishes/{id}", dishWriterAdaptor.UpdateDish).Methods(http.MethodPut)
-	api.HandleFunc("/dishes/{id}", dishWriterAdaptor.DeleteDish).Methods(http.MethodDelete)
-
-	dishReaderAdaptor := restaurants.NewDishReaderServiceRESTAdaptor(serviceProviders.DishReaderService)
-	api.HandleFunc("/dishes", dishReaderAdaptor.ListDishes).Methods(http.MethodGet)
-	api.HandleFunc("/dishes/search", dishReaderAdaptor.SearchDishes).Methods(http.MethodGet)
-	api.HandleFunc("/dishes/{id}", dishReaderAdaptor.GetDish).Methods(http.MethodGet)
+	dishServiceAdaptor := restaurants.NewDishServiceRESTAdaptor(serviceProviders.DishService)
+	api.HandleFunc("/dishes", dishServiceAdaptor.CreateDish).Methods(http.MethodPost)
+	api.HandleFunc("/dishes/{id}", dishServiceAdaptor.UpdateDish).Methods(http.MethodPut)
+	api.HandleFunc("/dishes/{id}", dishServiceAdaptor.DeleteDish).Methods(http.MethodDelete)
+	api.HandleFunc("/dishes", dishServiceAdaptor.ListDishes).Methods(http.MethodGet)
+	api.HandleFunc("/dishes/search", dishServiceAdaptor.SearchDishes).Methods(http.MethodGet)
+	api.HandleFunc("/dishes/{id}", dishServiceAdaptor.GetDish).Methods(http.MethodGet)
 
 	// rating routes
-	ratingSubmitterAdaptor := restaurants.NewRatingSubmitterServiceRESTAdaptor(serviceProviders.RatingSubmitterService)
-	api.HandleFunc("/dishes/{id}/ratings", ratingSubmitterAdaptor.SubmitRating).Methods(http.MethodPost)
-
-	ratingReaderAdaptor := restaurants.NewRatingReaderServiceRESTAdaptor(serviceProviders.RatingReaderService)
-	api.HandleFunc("/dishes/{id}/ratings", ratingReaderAdaptor.ListRatings).Methods(http.MethodGet)
+	ratingServiceAdaptor := restaurants.NewRatingServiceRESTAdaptor(serviceProviders.RatingService)
+	api.HandleFunc("/dishes/{id}/ratings", ratingServiceAdaptor.SubmitRating).Methods(http.MethodPost)
+	api.HandleFunc("/dishes/{id}/ratings", ratingServiceAdaptor.ListRatings).Methods(http.MethodGet)
 
 	// start http server
 	log.Info().Msgf("Starting HTTP server on port %d", port)

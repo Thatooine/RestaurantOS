@@ -14,19 +14,19 @@ import (
 
 type FirebaseAuthenticatorService struct {
 	firebaseApp        *firebase.App
-	accessTokenCreator pkgAuth.AccessTokenCreatorService
-	userReader         users.UserReaderService
+	accessTokenCreator pkgAuth.AccessTokenCreator
+	userRepository     users.UserRepository
 }
 
 func NewFirebaseAuthenticatorService(
 	firebaseApp *firebase.App,
-	accessTokenCreator pkgAuth.AccessTokenCreatorService,
-	userReader users.UserReaderService,
+	accessTokenCreator pkgAuth.AccessTokenCreator,
+	userRepository users.UserRepository,
 ) *FirebaseAuthenticatorService {
 	return &FirebaseAuthenticatorService{
 		firebaseApp:        firebaseApp,
 		accessTokenCreator: accessTokenCreator,
-		userReader:         userReader,
+		userRepository:     userRepository,
 	}
 }
 
@@ -46,7 +46,7 @@ func (s *FirebaseAuthenticatorService) AuthenticateWithFirebaseToken(ctx context
 	}
 
 	// Retrieve the user from the database by email
-	userResp, err := s.userReader.GetUser(ctx, users.GetUserRequest{Email: userRecord.Email})
+	userResp, err := s.userRepository.GetUser(ctx, users.GetUserRequest{Email: userRecord.Email})
 	if err != nil {
 		log.Ctx(ctx).Error().Err(err).Msg("failed to retrieve user by email")
 		return nil, fmt.Errorf("AuthenticateWithFirebaseToken failed: %w", err)

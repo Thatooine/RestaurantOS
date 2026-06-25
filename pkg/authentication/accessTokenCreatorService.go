@@ -2,7 +2,7 @@ package authentication
 
 import "context"
 
-type AccessTokenCreatorService interface {
+type AccessTokenCreator interface {
 	CreateAccessToken(ctx context.Context, request CreateAccessTokenRequest) (*CreateAccessTokenResponse, error)
 }
 

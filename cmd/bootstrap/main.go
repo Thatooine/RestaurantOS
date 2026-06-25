@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	pkgMongo "github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -47,8 +47,12 @@ func ensureIndexes(ctx context.Context, client *mongo.Client) {
 	}
 
 	for _, idx := range indexes {
-		store := pkgMongo.NewStore(client, databaseName, idx.collection)
-		if err := store.EnsureIndex(ctx, idx.field, idx.unique); err != nil {
+		collection := client.Database(databaseName).Collection(idx.collection)
+		model := mongo.IndexModel{
+			Keys:    bson.M{idx.field: 1},
+			Options: options.Index().SetUnique(idx.unique),
+		}
+		if _, err := collection.Indexes().CreateOne(ctx, model); err != nil {
 			log.Fatalf("failed to create index on %s.%s: %v", idx.collection, idx.field, err)
 		}
 		fmt.Printf("index ensured: %s.%s (unique=%v)\n", idx.collection, idx.field, idx.unique)

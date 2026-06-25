@@ -16,24 +16,21 @@ import (
 
 type UserRegistrationServiceImpl struct {
 	firebaseApp        *firebase.App
-	accessTokenCreator authentication.AccessTokenCreatorService
-	userCreator        users.UserCreatorService
-	userReader         users.UserReaderService
+	accessTokenCreator authentication.AccessTokenCreator
+	userRepository     users.UserRepository
 	firebaseAPIKey     string
 }
 
 func NewUserRegistrationServiceImpl(
 	firebaseApp *firebase.App,
-	accessTokenCreator authentication.AccessTokenCreatorService,
-	userCreator users.UserCreatorService,
-	userReader users.UserReaderService,
+	accessTokenCreator authentication.AccessTokenCreator,
+	userRepository users.UserRepository,
 	firebaseAPIKey string,
 ) *UserRegistrationServiceImpl {
 	return &UserRegistrationServiceImpl{
 		firebaseApp:        firebaseApp,
 		accessTokenCreator: accessTokenCreator,
-		userCreator:        userCreator,
-		userReader:         userReader,
+		userRepository:     userRepository,
 		firebaseAPIKey:     firebaseAPIKey,
 	}
 }
@@ -94,12 +91,12 @@ func (s *UserRegistrationServiceImpl) RegisterWithFirebaseToken(ctx context.Cont
 // getOrCreateUser checks if a user with the given email already exists (recovering
 // from a previous partial registration). If not, it creates a new user.
 func (s *UserRegistrationServiceImpl) getOrCreateUser(ctx context.Context, name string, email string) (users.User, error) {
-	existingResp, err := s.userReader.GetUser(ctx, users.GetUserRequest{Email: email})
+	existingResp, err := s.userRepository.GetUser(ctx, users.GetUserRequest{Email: email})
 	if err == nil {
 		return existingResp.User, nil
 	}
 
-	createResp, err := s.userCreator.CreateUser(
+	createResp, err := s.userRepository.CreateUser(
 		ctx,
 		users.CreateUserRequest{
 			Name:  name,

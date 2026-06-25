@@ -2,7 +2,7 @@ package authentication
 
 import "context"
 
-type AccessTokenValidatorService interface {
+type AccessTokenValidator interface {
 	ValidateAccessToken(ctx context.Context, request ValidateAccessTokenRequest) (*ValidateAccessTokenResponse, error)
 }
 

@@ -14,19 +14,19 @@ import (
 )
 
 type EmailAndPasswordAuthenticatorService struct {
-	accessTokenCreator pkgAuth.AccessTokenCreatorService
-	userReader         users.UserReaderService
+	accessTokenCreator pkgAuth.AccessTokenCreator
+	userRepository     users.UserRepository
 	firebaseAPIKey     string
 }
 
 func NewEmailAndPasswordAuthenticatorService(
-	accessTokenCreator pkgAuth.AccessTokenCreatorService,
-	userReader users.UserReaderService,
+	accessTokenCreator pkgAuth.AccessTokenCreator,
+	userRepository users.UserRepository,
 	firebaseAPIKey string,
 ) *EmailAndPasswordAuthenticatorService {
 	return &EmailAndPasswordAuthenticatorService{
 		accessTokenCreator: accessTokenCreator,
-		userReader:         userReader,
+		userRepository:     userRepository,
 		firebaseAPIKey:     firebaseAPIKey,
 	}
 }
@@ -57,7 +57,7 @@ func (s *EmailAndPasswordAuthenticatorService) AuthenticateWithEmailAndPassword(
 	}
 
 	// Retrieve the user from the database by email
-	userResp, err := s.userReader.GetUser(ctx, users.GetUserRequest{Email: firebaseResp.Email})
+	userResp, err := s.userRepository.GetUser(ctx, users.GetUserRequest{Email: firebaseResp.Email})
 	if err != nil {
 		log.Ctx(ctx).Error().Err(err).Msg("failed to retrieve user by email")
 		return nil, fmt.Errorf("AuthenticateWithEmailAndPassword failed: %w", err)

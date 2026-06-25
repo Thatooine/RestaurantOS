@@ -23,19 +23,20 @@ import (
 )
 
 type ServiceProviders struct {
-	UserCreator                          users.UserCreatorService
-	UserReaderService                    users.UserReaderService
-	DishWriterService                    restaurants.DishWriterService
-	DishReaderService                    restaurants.DishReaderService
-	RatingSubmitterService               restaurants.RatingSubmitterService
-	RatingReaderService                  restaurants.RatingReaderService
-	RestaurantReaderService              restaurants.RestaurantReaderService
+	UserRepository                       users.UserRepository
+	UserService                          users.UserService
+	DishRepository                       restaurants.DishRepository
+	DishService                          restaurants.DishService
+	RatingRepository                     restaurants.RatingRepository
+	RatingService                        restaurants.RatingService
+	RestaurantRepository                 restaurants.RestaurantRepository
+	RestaurantService                    restaurants.RestaurantService
 	RestaurantRegistrationService        restaurants.RestaurantRegistrationService
 	FirebaseAuthenticatorService         authentication.FirebaseAuthenticatorService
 	EmailAndPasswordAuthenticatorService authentication.EmailAndPasswordAuthenticatorService
 	UserRegistrationService              users.UserRegistrationService
-	AccessTokenCreatorService            authentication.AccessTokenCreatorService
-	AccessTokenValidatorService          authentication.AccessTokenValidatorService
+	AccessTokenCreatorService            authentication.AccessTokenCreator
+	AccessTokenValidatorService          authentication.AccessTokenValidator
 	RateLimiter                          rateLimiting.RedisTokenBucketRateLimiter
 }
 
@@ -45,21 +46,17 @@ func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureCo
 		return nil, err
 	}
 
-	const DatabaseName = "shire_shack"
+	userRepository := usersImpl.NewUserRepositoryMongoImpl(mongoClient)
+	userService := usersImpl.NewUserServiceImpl(userRepository)
 
-	dishStore := pkgMongo.NewStore(mongoClient, DatabaseName, "dishes")
-	ratingsStore := pkgMongo.NewStore(mongoClient, DatabaseName, "ratings")
-	restaurantStore := pkgMongo.NewStore(mongoClient, DatabaseName, "restaurants")
-	usersStore := pkgMongo.NewStore(mongoClient, DatabaseName, "users")
+	dishRepository := restaurantsImpl.NewDishRepositoryMongoImpl(mongoClient)
+	restaurantRepository := restaurantsImpl.NewRestaurantRepositoryMongoImpl(mongoClient)
+	ratingRepository := restaurantsImpl.NewRatingRepositoryMongoImpl(mongoClient)
 
-	userNewCreator := usersImpl.NewUserCreatorServiceImpl(usersStore)
-	userReader := usersImpl.NewUserReaderServiceImpl(usersStore)
-	dishWriter := restaurantsImpl.NewDishWriterServiceImpl(dishStore, usersStore, restaurantStore)
-	dishReader := restaurantsImpl.NewDishReaderServiceImpl(dishStore)
-	ratingSubmitter := restaurantsImpl.NewRatingSubmitterServiceImpl(ratingsStore)
-	ratingReader := restaurantsImpl.NewRatingReaderServiceImpl(ratingsStore)
-	restaurantReader := restaurantsImpl.NewRestaurantReaderServiceImpl(restaurantStore)
-	restaurantRegistrar := restaurantsImpl.NewRestaurantRegistrationServiceImpl(restaurantStore, usersStore)
+	dishService := restaurantsImpl.NewDishServiceImpl(dishRepository, restaurantRepository, userRepository)
+	restaurantService := restaurantsImpl.NewRestaurantServiceImpl(restaurantRepository)
+	ratingService := restaurantsImpl.NewRatingServiceImpl(ratingRepository)
+	restaurantRegistrar := restaurantsImpl.NewRestaurantRegistrationServiceImpl(restaurantRepository, userRepository)
 
 	block, _ := pem.Decode([]byte(secureConf.JWTPrivateKeyPEM))
 	if block == nil {
@@ -104,19 +101,20 @@ func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureCo
 
 	// authentication services
 	accessTokenCreator := authenticationImpl.NewAccessTokenCreatorServiceImpl(tokenSigner)
-	accessTokenValidator := authenticationImpl.NewAccessTokenValidatorServiceImpl(&privateKey.PublicKey)
-	registrationService := usersImpl.NewUserRegistrationServiceImpl(firebaseApp, accessTokenCreator, userNewCreator, userReader, secureConf.FirebaseWebAPIKey)
-	firebaseAuthenticator := authenticationImpl.NewFirebaseAuthenticatorService(firebaseApp, accessTokenCreator, userReader)
-	emailPasswordAuthenticator := authenticationImpl.NewEmailAndPasswordAuthenticatorService(accessTokenCreator, userReader, secureConf.FirebaseWebAPIKey)
+	accessTokenValidator := authenticationImpl.NewAccessTokenValidatorImpl(&privateKey.PublicKey)
+	registrationService := usersImpl.NewUserRegistrationServiceImpl(firebaseApp, accessTokenCreator, userRepository, secureConf.FirebaseWebAPIKey)
+	firebaseAuthenticator := authenticationImpl.NewFirebaseAuthenticatorService(firebaseApp, accessTokenCreator, userRepository)
+	emailPasswordAuthenticator := authenticationImpl.NewEmailAndPasswordAuthenticatorService(accessTokenCreator, userRepository, secureConf.FirebaseWebAPIKey)
 
 	return &ServiceProviders{
-		UserCreator:                          userNewCreator,
-		UserReaderService:                    userReader,
-		DishWriterService:                    dishWriter,
-		DishReaderService:                    dishReader,
-		RatingSubmitterService:               ratingSubmitter,
-		RatingReaderService:                  ratingReader,
-		RestaurantReaderService:              restaurantReader,
+		UserRepository:                       userRepository,
+		UserService:                          userService,
+		DishRepository:                       dishRepository,
+		DishService:                          dishService,
+		RatingRepository:                     ratingRepository,
+		RatingService:                        ratingService,
+		RestaurantRepository:                 restaurantRepository,
+		RestaurantService:                    restaurantService,
 		RestaurantRegistrationService:        restaurantRegistrar,
 		UserRegistrationService:              registrationService,
 		FirebaseAuthenticatorService:         firebaseAuthenticator,

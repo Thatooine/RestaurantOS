@@ -15,16 +15,13 @@ import (
 func TestGetOrCreateUser_ReturnsExistingUser(t *testing.T) {
 	existingUser := users.User{ID: "user-1", Name: "Frodo", Email: "frodo@shire.com", Roles: []users.Role{users.RoleCustomer}}
 
-	reader := &UserReaderServiceMock{
+	repo := &UserRepositoryMock{
 		GetUserFn: func(_ context.Context, req users.GetUserRequest) (*users.GetUserResponse, error) {
 			if req.Email != "frodo@shire.com" {
 				t.Fatalf("expected email frodo@shire.com, got %s", req.Email)
 			}
 			return &users.GetUserResponse{User: existingUser}, nil
 		},
-	}
-
-	creator := &UserCreatorServiceMock{
 		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
 			t.Fatal("CreateUser should not be called when user exists")
 			return nil, nil
@@ -32,8 +29,7 @@ func TestGetOrCreateUser_ReturnsExistingUser(t *testing.T) {
 	}
 
 	svc := &UserRegistrationServiceImpl{
-		userCreator: creator,
-		userReader:  reader,
+		userRepository: repo,
 	}
 
 	user, err := svc.getOrCreateUser(context.Background(), "Frodo", "frodo@shire.com")
@@ -48,13 +44,10 @@ func TestGetOrCreateUser_ReturnsExistingUser(t *testing.T) {
 func TestGetOrCreateUser_CreatesNewUser(t *testing.T) {
 	newUser := users.User{ID: "user-2", Name: "Sam", Email: "sam@shire.com", Roles: []users.Role{users.RoleCustomer}}
 
-	reader := &UserReaderServiceMock{
+	repo := &UserRepositoryMock{
 		GetUserFn: func(_ context.Context, _ users.GetUserRequest) (*users.GetUserResponse, error) {
 			return nil, fmt.Errorf("user not found")
 		},
-	}
-
-	creator := &UserCreatorServiceMock{
 		CreateUserFn: func(_ context.Context, req users.CreateUserRequest) (*users.CreateUserResponse, error) {
 			if req.Name != "Sam" || req.Email != "sam@shire.com" {
 				t.Fatalf("unexpected create request: %+v", req)
@@ -64,8 +57,7 @@ func TestGetOrCreateUser_CreatesNewUser(t *testing.T) {
 	}
 
 	svc := &UserRegistrationServiceImpl{
-		userCreator: creator,
-		userReader:  reader,
+		userRepository: repo,
 	}
 
 	user, err := svc.getOrCreateUser(context.Background(), "Sam", "sam@shire.com")
@@ -78,21 +70,17 @@ func TestGetOrCreateUser_CreatesNewUser(t *testing.T) {
 }
 
 func TestGetOrCreateUser_CreateFails(t *testing.T) {
-	reader := &UserReaderServiceMock{
+	repo := &UserRepositoryMock{
 		GetUserFn: func(_ context.Context, _ users.GetUserRequest) (*users.GetUserResponse, error) {
 			return nil, fmt.Errorf("user not found")
 		},
-	}
-
-	creator := &UserCreatorServiceMock{
 		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
 			return nil, fmt.Errorf("database error")
 		},
 	}
 
 	svc := &UserRegistrationServiceImpl{
-		userCreator: creator,
-		userReader:  reader,
+		userRepository: repo,
 	}
 
 	_, err := svc.getOrCreateUser(context.Background(), "Gandalf", "gandalf@istari.com")
@@ -158,13 +146,10 @@ func TestIssueToken_TokenCreationFails(t *testing.T) {
 func TestRegistrationFlow_NewUser(t *testing.T) {
 	newUser := users.User{ID: "user-1", Name: "Frodo", Email: "frodo@shire.com", Roles: []users.Role{users.RoleCustomer}}
 
-	reader := &UserReaderServiceMock{
+	repo := &UserRepositoryMock{
 		GetUserFn: func(_ context.Context, _ users.GetUserRequest) (*users.GetUserResponse, error) {
 			return nil, fmt.Errorf("not found")
 		},
-	}
-
-	creator := &UserCreatorServiceMock{
 		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
 			return &users.CreateUserResponse{User: newUser}, nil
 		},
@@ -178,8 +163,7 @@ func TestRegistrationFlow_NewUser(t *testing.T) {
 
 	svc := &UserRegistrationServiceImpl{
 		accessTokenCreator: tokenCreator,
-		userCreator:        creator,
-		userReader:         reader,
+		userRepository:     repo,
 	}
 
 	user, err := svc.getOrCreateUser(context.Background(), "Frodo", "frodo@shire.com")
@@ -203,17 +187,14 @@ func TestRegistrationFlow_RecoveryFromPartialRegistration(t *testing.T) {
 	// User already exists in DB (Firebase succeeded before, DB creation succeeded, but token failed)
 	existingUser := users.User{ID: "user-1", Name: "Frodo", Email: "frodo@shire.com", Roles: []users.Role{users.RoleCustomer}}
 
-	reader := &UserReaderServiceMock{
+	createCalled := false
+	repo := &UserRepositoryMock{
 		GetUserFn: func(_ context.Context, req users.GetUserRequest) (*users.GetUserResponse, error) {
 			if req.Email == "frodo@shire.com" {
 				return &users.GetUserResponse{User: existingUser}, nil
 			}
 			return nil, fmt.Errorf("not found")
 		},
-	}
-
-	createCalled := false
-	creator := &UserCreatorServiceMock{
 		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
 			createCalled = true
 			t.Fatal("CreateUser should not be called when user already exists")
@@ -229,8 +210,7 @@ func TestRegistrationFlow_RecoveryFromPartialRegistration(t *testing.T) {
 
 	svc := &UserRegistrationServiceImpl{
 		accessTokenCreator: tokenCreator,
-		userCreator:        creator,
-		userReader:         reader,
+		userRepository:     repo,
 	}
 
 	// Simulate retry: user exists, should skip creation

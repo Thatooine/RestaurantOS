@@ -12,22 +12,22 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// AccessTokenValidatorServiceImpl validates signed JWT access tokens using go-jose.
-type AccessTokenValidatorServiceImpl struct {
+// AccessTokenValidatorImpl validates signed JWT access tokens using go-jose.
+type AccessTokenValidatorImpl struct {
 	publicKey *rsa.PublicKey
 }
 
-// NewAccessTokenValidatorServiceImpl returns a new AccessTokenValidatorServiceImpl
+// NewAccessTokenValidatorImpl returns a new AccessTokenValidatorImpl
 // with the provided RSA public key for verifying token signatures.
-func NewAccessTokenValidatorServiceImpl(publicKey *rsa.PublicKey) *AccessTokenValidatorServiceImpl {
-	return &AccessTokenValidatorServiceImpl{
+func NewAccessTokenValidatorImpl(publicKey *rsa.PublicKey) *AccessTokenValidatorImpl {
+	return &AccessTokenValidatorImpl{
 		publicKey: publicKey,
 	}
 }
 
 // ValidateAccessToken parses the compact-serialized JWT, verifies its signature,
 // unmarshals the login claims, and checks that the token has not expired.
-func (a *AccessTokenValidatorServiceImpl) ValidateAccessToken(ctx context.Context, request authentication.ValidateAccessTokenRequest) (*authentication.ValidateAccessTokenResponse, error) {
+func (a *AccessTokenValidatorImpl) ValidateAccessToken(ctx context.Context, request authentication.ValidateAccessTokenRequest) (*authentication.ValidateAccessTokenResponse, error) {
 	// parse the compact-serialized JWS
 	signed, err := jose.ParseSigned(request.AccessToken, []jose.SignatureAlgorithm{jose.RS256})
 	if err != nil {

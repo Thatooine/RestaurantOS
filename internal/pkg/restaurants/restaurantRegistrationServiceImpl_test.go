@@ -4,20 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"testing"
 
+	usersImpl "github.com/bash/the-dancing-pony-v2-rnyfbr/internal/pkg/users"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/errs"
-	pkgMongo "github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/mongo"
 	pkgRestaurants "github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/restaurants"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/users"
-	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-func newTestRestaurantRegistrationService(restaurantStore pkgMongo.Storer, userStore pkgMongo.Storer) *RestaurantRegistrationServiceImpl {
+func newTestRestaurantRegistrationService(restaurantRepository pkgRestaurants.RestaurantRepository, userRepository users.UserRepository) *RestaurantRegistrationServiceImpl {
 	return &RestaurantRegistrationServiceImpl{
-		restaurantStore: restaurantStore,
-		userStore:       userStore,
+		restaurantRepository: restaurantRepository,
+		userRepository:       userRepository,
 	}
 }
 
@@ -34,13 +32,13 @@ func TestRegisterRestaurant_ValidationFails(t *testing.T) {
 }
 
 func TestRegisterRestaurant_UserNotFound(t *testing.T) {
-	userStore := &pkgMongo.StoreMock{
-		GetFn: func(_ context.Context, id string, _ interface{}) error {
-			return fmt.Errorf("user not found")
+	userRepository := &usersImpl.UserRepositoryMock{
+		GetUserByIDFn: func(_ context.Context, _ users.GetUserByIDRequest) (*users.GetUserByIDResponse, error) {
+			return nil, fmt.Errorf("user not found")
 		},
 	}
 
-	svc := newTestRestaurantRegistrationService(nil, userStore)
+	svc := newTestRestaurantRegistrationService(nil, userRepository)
 
 	_, err := svc.RegisterRestaurant(context.Background(), pkgRestaurants.RegisterRestaurantRequest{
 		UserID: "user-1",
@@ -53,30 +51,28 @@ func TestRegisterRestaurant_UserNotFound(t *testing.T) {
 }
 
 func TestRegisterRestaurant_AlreadyFullyRegistered(t *testing.T) {
-	userStore := &pkgMongo.StoreMock{
-		GetFn: func(_ context.Context, _ string, result interface{}) error {
-			u := result.(*users.User)
-			*u = users.User{
-				ID:    "user-1",
-				Name:  "Aragorn",
-				Email: "aragorn@gondor.com",
-				Roles: []users.Role{users.RoleCustomer, users.RoleRestaurantOwner},
-			}
-			return nil
+	userRepository := &usersImpl.UserRepositoryMock{
+		GetUserByIDFn: func(_ context.Context, _ users.GetUserByIDRequest) (*users.GetUserByIDResponse, error) {
+			return &users.GetUserByIDResponse{
+				User: users.User{
+					ID:    "user-1",
+					Name:  "Aragorn",
+					Email: "aragorn@gondor.com",
+					Roles: []users.Role{users.RoleCustomer, users.RoleRestaurantOwner},
+				},
+			}, nil
 		},
 	}
 
-	restaurantStore := &pkgMongo.StoreMock{
-		ListFn: func(_ context.Context, _ bson.M, _ int64, _ int64, results interface{}) (int64, error) {
-			r := results.(*[]pkgRestaurants.Restaurant)
-			*r = []pkgRestaurants.Restaurant{
-				{ID: "rest-1", OwnerID: "user-1", Name: "Existing Restaurant", City: "Bree"},
-			}
-			return 1, nil
+	restaurantRepository := &RestaurantRepositoryMock{
+		GetMyRestaurantFn: func(_ context.Context, _ pkgRestaurants.GetMyRestaurantRequest) (*pkgRestaurants.GetRestaurantResponse, error) {
+			return &pkgRestaurants.GetRestaurantResponse{
+				Restaurant: pkgRestaurants.Restaurant{ID: "rest-1", OwnerID: "user-1", Name: "Existing Restaurant", City: "Bree"},
+			}, nil
 		},
 	}
 
-	svc := newTestRestaurantRegistrationService(restaurantStore, userStore)
+	svc := newTestRestaurantRegistrationService(restaurantRepository, userRepository)
 
 	_, err := svc.RegisterRestaurant(context.Background(), pkgRestaurants.RegisterRestaurantRequest{
 		UserID: "user-1",
@@ -92,28 +88,25 @@ func TestRegisterRestaurant_AlreadyFullyRegistered(t *testing.T) {
 }
 
 func TestRegisterRestaurant_RecoveryFromPartialFailure(t *testing.T) {
+	roleUpdated := false
 	// Restaurant exists but user lacks the RestaurantOwner role
-	userStore := &pkgMongo.StoreMock{
-		GetFn: func(_ context.Context, _ string, result interface{}) error {
-			u := result.(*users.User)
-			*u = users.User{
-				ID:    "user-1",
-				Name:  "Aragorn",
-				Email: "aragorn@gondor.com",
-				Roles: []users.Role{users.RoleCustomer}, // Missing RestaurantOwner
-			}
-			return nil
+	userRepository := &usersImpl.UserRepositoryMock{
+		GetUserByIDFn: func(_ context.Context, _ users.GetUserByIDRequest) (*users.GetUserByIDResponse, error) {
+			return &users.GetUserByIDResponse{
+				User: users.User{
+					ID:    "user-1",
+					Name:  "Aragorn",
+					Email: "aragorn@gondor.com",
+					Roles: []users.Role{users.RoleCustomer}, // Missing RestaurantOwner
+				},
+			}, nil
 		},
-		UpdateFn: func(_ context.Context, id string, update bson.M, result interface{}) error {
-			if id != "user-1" {
-				t.Fatalf("expected update for user-1, got %s", id)
-			}
-			roles, ok := update["roles"].([]users.Role)
-			if !ok {
-				t.Fatal("expected roles in update")
+		UpdateUserRolesFn: func(_ context.Context, request users.UpdateUserRolesRequest) (*users.UpdateUserRolesResponse, error) {
+			if request.UserID != "user-1" {
+				t.Fatalf("expected update for user-1, got %s", request.UserID)
 			}
 			hasOwnerRole := false
-			for _, r := range roles {
+			for _, r := range request.Roles {
 				if r == users.RoleRestaurantOwner {
 					hasOwnerRole = true
 				}
@@ -121,7 +114,8 @@ func TestRegisterRestaurant_RecoveryFromPartialFailure(t *testing.T) {
 			if !hasOwnerRole {
 				t.Fatal("expected RestaurantOwner role in update")
 			}
-			return nil
+			roleUpdated = true
+			return &users.UpdateUserRolesResponse{}, nil
 		},
 	}
 
@@ -129,15 +123,17 @@ func TestRegisterRestaurant_RecoveryFromPartialFailure(t *testing.T) {
 		ID: "rest-1", OwnerID: "user-1", Name: "The Prancing Pony", City: "Bree",
 	}
 
-	restaurantStore := &pkgMongo.StoreMock{
-		ListFn: func(_ context.Context, _ bson.M, _ int64, _ int64, results interface{}) (int64, error) {
-			r := results.(*[]pkgRestaurants.Restaurant)
-			*r = []pkgRestaurants.Restaurant{existingRestaurant}
-			return 1, nil
+	restaurantRepository := &RestaurantRepositoryMock{
+		GetMyRestaurantFn: func(_ context.Context, _ pkgRestaurants.GetMyRestaurantRequest) (*pkgRestaurants.GetRestaurantResponse, error) {
+			return &pkgRestaurants.GetRestaurantResponse{Restaurant: existingRestaurant}, nil
+		},
+		CreateRestaurantFn: func(_ context.Context, _ pkgRestaurants.CreateRestaurantRequest) (*pkgRestaurants.CreateRestaurantResponse, error) {
+			t.Fatal("CreateRestaurant should not be called when a restaurant already exists")
+			return nil, nil
 		},
 	}
 
-	svc := newTestRestaurantRegistrationService(restaurantStore, userStore)
+	svc := newTestRestaurantRegistrationService(restaurantRepository, userRepository)
 
 	resp, err := svc.RegisterRestaurant(context.Background(), pkgRestaurants.RegisterRestaurantRequest{
 		UserID: "user-1",
@@ -154,50 +150,55 @@ func TestRegisterRestaurant_RecoveryFromPartialFailure(t *testing.T) {
 	if resp.Restaurant.Name != "The Prancing Pony" {
 		t.Errorf("expected existing restaurant name, got %s", resp.Restaurant.Name)
 	}
+	if !roleUpdated {
+		t.Error("expected user role to be updated")
+	}
 }
 
 func TestRegisterRestaurant_NewRegistration(t *testing.T) {
-	var storedRestaurant pkgRestaurants.Restaurant
+	var createRequest pkgRestaurants.CreateRestaurantRequest
 	roleUpdated := false
 
-	userStore := &pkgMongo.StoreMock{
-		GetFn: func(_ context.Context, _ string, result interface{}) error {
-			u := result.(*users.User)
-			*u = users.User{
-				ID:    "user-1",
-				Name:  "Aragorn",
-				Email: "aragorn@gondor.com",
-				Roles: []users.Role{users.RoleCustomer},
-			}
-			return nil
+	userRepository := &usersImpl.UserRepositoryMock{
+		GetUserByIDFn: func(_ context.Context, _ users.GetUserByIDRequest) (*users.GetUserByIDResponse, error) {
+			return &users.GetUserByIDResponse{
+				User: users.User{
+					ID:    "user-1",
+					Name:  "Aragorn",
+					Email: "aragorn@gondor.com",
+					Roles: []users.Role{users.RoleCustomer},
+				},
+			}, nil
 		},
-		UpdateFn: func(_ context.Context, id string, update bson.M, _ interface{}) error {
-			if id != "user-1" {
-				t.Fatalf("expected update for user-1, got %s", id)
+		UpdateUserRolesFn: func(_ context.Context, request users.UpdateUserRolesRequest) (*users.UpdateUserRolesResponse, error) {
+			if request.UserID != "user-1" {
+				t.Fatalf("expected update for user-1, got %s", request.UserID)
 			}
 			roleUpdated = true
-			return nil
+			return &users.UpdateUserRolesResponse{}, nil
 		},
 	}
 
-	restaurantStore := &pkgMongo.StoreMock{
-		ListFn: func(_ context.Context, _ bson.M, _ int64, _ int64, results interface{}) (int64, error) {
-			// No existing restaurants
-			r := results.(*[]pkgRestaurants.Restaurant)
-			*r = []pkgRestaurants.Restaurant{}
-			return 0, nil
+	restaurantRepository := &RestaurantRepositoryMock{
+		GetMyRestaurantFn: func(_ context.Context, _ pkgRestaurants.GetMyRestaurantRequest) (*pkgRestaurants.GetRestaurantResponse, error) {
+			// No existing restaurant for this owner
+			return nil, fmt.Errorf("none: %w", errs.ErrNotFound)
 		},
-		PutFn: func(_ context.Context, document interface{}) (string, error) {
-			restaurant, ok := document.(pkgRestaurants.Restaurant)
-			if !ok {
-				t.Fatal("expected Restaurant document")
-			}
-			storedRestaurant = restaurant
-			return restaurant.ID, nil
+		CreateRestaurantFn: func(_ context.Context, request pkgRestaurants.CreateRestaurantRequest) (*pkgRestaurants.CreateRestaurantResponse, error) {
+			createRequest = request
+			return &pkgRestaurants.CreateRestaurantResponse{
+				Restaurant: pkgRestaurants.Restaurant{
+					ID:      "rest-1",
+					OwnerID: request.OwnerID,
+					Name:    request.Name,
+					City:    request.City,
+					Image:   request.Image,
+				},
+			}, nil
 		},
 	}
 
-	svc := newTestRestaurantRegistrationService(restaurantStore, userStore)
+	svc := newTestRestaurantRegistrationService(restaurantRepository, userRepository)
 
 	resp, err := svc.RegisterRestaurant(context.Background(), pkgRestaurants.RegisterRestaurantRequest{
 		UserID: "user-1",
@@ -209,23 +210,26 @@ func TestRegisterRestaurant_NewRegistration(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify restaurant was created with correct fields
+	// Verify the repository received the correct create request
+	if createRequest.OwnerID != "user-1" {
+		t.Errorf("expected create ownerID user-1, got %s", createRequest.OwnerID)
+	}
+	if createRequest.Name != "The Green Dragon" {
+		t.Errorf("expected create name The Green Dragon, got %s", createRequest.Name)
+	}
+	if createRequest.City != "Hobbiton" {
+		t.Errorf("expected create city Hobbiton, got %s", createRequest.City)
+	}
+
+	// Verify restaurant in response
 	if resp.Restaurant.Name != "The Green Dragon" {
 		t.Errorf("expected name The Green Dragon, got %s", resp.Restaurant.Name)
-	}
-	if resp.Restaurant.City != "Hobbiton" {
-		t.Errorf("expected city Hobbiton, got %s", resp.Restaurant.City)
 	}
 	if resp.Restaurant.OwnerID != "user-1" {
 		t.Errorf("expected ownerID user-1, got %s", resp.Restaurant.OwnerID)
 	}
 	if resp.Restaurant.ID == "" {
-		t.Error("expected a generated restaurant ID")
-	}
-
-	// Verify the restaurant was stored
-	if !reflect.DeepEqual(storedRestaurant, resp.Restaurant) {
-		t.Error("stored restaurant does not match response")
+		t.Error("expected a restaurant ID")
 	}
 
 	// Verify user role was updated
@@ -234,27 +238,25 @@ func TestRegisterRestaurant_NewRegistration(t *testing.T) {
 	}
 }
 
-func TestRegisterRestaurant_StorePutFails(t *testing.T) {
-	userStore := &pkgMongo.StoreMock{
-		GetFn: func(_ context.Context, _ string, result interface{}) error {
-			u := result.(*users.User)
-			*u = users.User{ID: "user-1", Roles: []users.Role{users.RoleCustomer}}
-			return nil
+func TestRegisterRestaurant_CreateFails(t *testing.T) {
+	userRepository := &usersImpl.UserRepositoryMock{
+		GetUserByIDFn: func(_ context.Context, _ users.GetUserByIDRequest) (*users.GetUserByIDResponse, error) {
+			return &users.GetUserByIDResponse{
+				User: users.User{ID: "user-1", Roles: []users.Role{users.RoleCustomer}},
+			}, nil
 		},
 	}
 
-	restaurantStore := &pkgMongo.StoreMock{
-		ListFn: func(_ context.Context, _ bson.M, _ int64, _ int64, results interface{}) (int64, error) {
-			r := results.(*[]pkgRestaurants.Restaurant)
-			*r = []pkgRestaurants.Restaurant{}
-			return 0, nil
+	restaurantRepository := &RestaurantRepositoryMock{
+		GetMyRestaurantFn: func(_ context.Context, _ pkgRestaurants.GetMyRestaurantRequest) (*pkgRestaurants.GetRestaurantResponse, error) {
+			return nil, fmt.Errorf("none: %w", errs.ErrNotFound)
 		},
-		PutFn: func(_ context.Context, _ interface{}) (string, error) {
-			return "", fmt.Errorf("database error")
+		CreateRestaurantFn: func(_ context.Context, _ pkgRestaurants.CreateRestaurantRequest) (*pkgRestaurants.CreateRestaurantResponse, error) {
+			return nil, fmt.Errorf("database error")
 		},
 	}
 
-	svc := newTestRestaurantRegistrationService(restaurantStore, userStore)
+	svc := newTestRestaurantRegistrationService(restaurantRepository, userRepository)
 
 	_, err := svc.RegisterRestaurant(context.Background(), pkgRestaurants.RegisterRestaurantRequest{
 		UserID: "user-1",
@@ -267,29 +269,29 @@ func TestRegisterRestaurant_StorePutFails(t *testing.T) {
 }
 
 func TestRegisterRestaurant_RoleUpdateFails(t *testing.T) {
-	userStore := &pkgMongo.StoreMock{
-		GetFn: func(_ context.Context, _ string, result interface{}) error {
-			u := result.(*users.User)
-			*u = users.User{ID: "user-1", Roles: []users.Role{users.RoleCustomer}}
-			return nil
+	userRepository := &usersImpl.UserRepositoryMock{
+		GetUserByIDFn: func(_ context.Context, _ users.GetUserByIDRequest) (*users.GetUserByIDResponse, error) {
+			return &users.GetUserByIDResponse{
+				User: users.User{ID: "user-1", Roles: []users.Role{users.RoleCustomer}},
+			}, nil
 		},
-		UpdateFn: func(_ context.Context, _ string, _ bson.M, _ interface{}) error {
-			return fmt.Errorf("update failed")
-		},
-	}
-
-	restaurantStore := &pkgMongo.StoreMock{
-		ListFn: func(_ context.Context, _ bson.M, _ int64, _ int64, results interface{}) (int64, error) {
-			r := results.(*[]pkgRestaurants.Restaurant)
-			*r = []pkgRestaurants.Restaurant{}
-			return 0, nil
-		},
-		PutFn: func(_ context.Context, doc interface{}) (string, error) {
-			return "rest-1", nil
+		UpdateUserRolesFn: func(_ context.Context, _ users.UpdateUserRolesRequest) (*users.UpdateUserRolesResponse, error) {
+			return nil, fmt.Errorf("update failed")
 		},
 	}
 
-	svc := newTestRestaurantRegistrationService(restaurantStore, userStore)
+	restaurantRepository := &RestaurantRepositoryMock{
+		GetMyRestaurantFn: func(_ context.Context, _ pkgRestaurants.GetMyRestaurantRequest) (*pkgRestaurants.GetRestaurantResponse, error) {
+			return nil, fmt.Errorf("none: %w", errs.ErrNotFound)
+		},
+		CreateRestaurantFn: func(_ context.Context, request pkgRestaurants.CreateRestaurantRequest) (*pkgRestaurants.CreateRestaurantResponse, error) {
+			return &pkgRestaurants.CreateRestaurantResponse{
+				Restaurant: pkgRestaurants.Restaurant{ID: "rest-1", OwnerID: request.OwnerID, Name: request.Name, City: request.City},
+			}, nil
+		},
+	}
+
+	svc := newTestRestaurantRegistrationService(restaurantRepository, userRepository)
 
 	_, err := svc.RegisterRestaurant(context.Background(), pkgRestaurants.RegisterRestaurantRequest{
 		UserID: "user-1",
