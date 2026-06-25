@@ -24,11 +24,12 @@ echo "==> Starting MongoDB and Redis..."
 docker compose up -d
 echo "==> Waiting for services to be ready..."
 
-# Wait for MongoDB
-until docker compose exec mongoDB mongosh --quiet --eval "db.runCommand({ping:1})" >/dev/null 2>&1; do
+# Wait for MongoDB replica set to elect a primary (transactions require a replica set).
+# The compose healthcheck initiates the replica set; here we wait until it is writable.
+until docker compose exec mongoDB mongosh --quiet --eval "db.hello().isWritablePrimary" 2>/dev/null | grep -q true; do
     sleep 1
 done
-echo "    MongoDB is ready."
+echo "    MongoDB is ready (replica set primary elected)."
 
 # Wait for Redis
 until docker compose exec redis redis-cli ping 2>/dev/null | grep -q PONG; do

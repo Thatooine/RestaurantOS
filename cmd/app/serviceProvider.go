@@ -50,10 +50,12 @@ func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureCo
 	restaurantRepository := restaurantsImpl.NewRestaurantRepositoryMongoImpl(mongoClient)
 	ratingRepository := restaurantsImpl.NewRatingRepositoryMongoImpl(mongoClient)
 
+	transactionManager := pkgMongo.NewTransactionManager(mongoClient)
+
 	dishService := restaurantsImpl.NewDishServiceImpl(dishRepository, restaurantRepository, userRepository)
 	restaurantService := restaurantsImpl.NewRestaurantServiceImpl(restaurantRepository)
 	ratingService := restaurantsImpl.NewRatingServiceImpl(ratingRepository)
-	restaurantRegistrar := restaurantsImpl.NewRestaurantRegistrationServiceImpl(restaurantRepository, userRepository)
+	restaurantRegistrar := restaurantsImpl.NewRestaurantRegistrationServiceImpl(restaurantRepository, userRepository, transactionManager)
 
 	block, _ := pem.Decode([]byte(secureConf.JWTPrivateKeyPEM))
 	if block == nil {

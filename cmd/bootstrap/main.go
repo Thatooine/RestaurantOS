@@ -15,7 +15,7 @@ const databaseName = "shire_shack"
 func main() {
 	ctx := context.Background()
 
-	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017"))
+	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017/?directConnection=true"))
 	if err != nil {
 		log.Fatalf("failed to connect to mongo: %v", err)
 	}

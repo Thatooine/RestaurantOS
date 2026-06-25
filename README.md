@@ -35,7 +35,7 @@ docker-compose up -d
 ```
 
 This starts:
-- MongoDB on `localhost:27017`
+- MongoDB on `localhost:27017`, running as a single-node replica set (`rs0`) so multi-document transactions work. The replica set is initiated automatically by the container's healthcheck a few seconds after startup; clients connect with `?directConnection=true`.
 - Redis on `localhost:6379`
 - Prometheus on `localhost:9090`
 - Grafana on `localhost:3000` (admin/admin; Prometheus datasource auto-provisioned)

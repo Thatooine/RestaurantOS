@@ -1,5 +1,3 @@
-version: '3.7'
-
 services:
   mongoDB:
     image: mongo
@@ -7,6 +5,17 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    # Run as a single-node replica set so multi-document transactions are supported.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    # Idempotently initiate the replica set: rs.status() succeeds once initiated,
+    # otherwise we initiate it. The member host must match how clients connect
+    # (localhost:27017) so the advertised address resolves from the host.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }) }"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7-alpine

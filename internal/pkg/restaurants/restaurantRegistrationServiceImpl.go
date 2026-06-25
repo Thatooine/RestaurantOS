@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/errs"
+	pkgMongo "github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/mongo"
 	pkgRestaurants "github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/restaurants"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/users"
 	"github.com/rs/zerolog/log"
@@ -15,12 +16,18 @@ import (
 type RestaurantRegistrationServiceImpl struct {
 	restaurantRepository pkgRestaurants.RestaurantRepository
 	userRepository       users.UserRepository
+	transactionManager   pkgMongo.TransactionManager
 }
 
-func NewRestaurantRegistrationServiceImpl(restaurantRepository pkgRestaurants.RestaurantRepository, userRepository users.UserRepository) *RestaurantRegistrationServiceImpl {
+func NewRestaurantRegistrationServiceImpl(
+	restaurantRepository pkgRestaurants.RestaurantRepository,
+	userRepository users.UserRepository,
+	transactionManager pkgMongo.TransactionManager,
+) *RestaurantRegistrationServiceImpl {
 	return &RestaurantRegistrationServiceImpl{
 		restaurantRepository: restaurantRepository,
 		userRepository:       userRepository,
+		transactionManager:   transactionManager,
 	}
 }
 
@@ -30,6 +37,27 @@ func (s *RestaurantRegistrationServiceImpl) RegisterRestaurant(ctx context.Conte
 		return nil, fmt.Errorf("invalid request for RegisterRestaurant: %w", err)
 	}
 
+	// Creating the restaurant and promoting the user must happen atomically, so
+	// run them inside a single transaction.
+	var result *pkgRestaurants.RegisterRestaurantResponse
+	err := s.transactionManager.RunInTransaction(ctx, func(sessionCtx context.Context) error {
+		response, err := s.registerRestaurant(sessionCtx, request)
+		if err != nil {
+			return err
+		}
+		result = response
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// registerRestaurant performs the registration work against the supplied context,
+// which is the session-scoped context from the surrounding transaction.
+func (s *RestaurantRegistrationServiceImpl) registerRestaurant(ctx context.Context, request pkgRestaurants.RegisterRestaurantRequest) (*pkgRestaurants.RegisterRestaurantResponse, error) {
 	// Fetch the current user.
 	userResp, err := s.userRepository.GetUserByID(ctx, users.GetUserByIDRequest{ID: request.UserID})
 	if err != nil {

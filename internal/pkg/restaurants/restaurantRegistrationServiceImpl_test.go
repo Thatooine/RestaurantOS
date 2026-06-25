@@ -12,10 +12,19 @@ import (
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/users"
 )
 
+// fakeTransactionManager runs the callback directly with the given context,
+// without a real mongo session — suitable for pure-Go unit tests.
+type fakeTransactionManager struct{}
+
+func (fakeTransactionManager) RunInTransaction(ctx context.Context, fn func(sessionCtx context.Context) error) error {
+	return fn(ctx)
+}
+
 func newTestRestaurantRegistrationService(restaurantRepository pkgRestaurants.RestaurantRepository, userRepository users.UserRepository) *RestaurantRegistrationServiceImpl {
 	return &RestaurantRegistrationServiceImpl{
 		restaurantRepository: restaurantRepository,
 		userRepository:       userRepository,
+		transactionManager:   fakeTransactionManager{},
 	}
 }
 

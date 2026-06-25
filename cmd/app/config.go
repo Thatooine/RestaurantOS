@@ -33,7 +33,7 @@ type SecureConfig struct {
 
 func GetConfig(configFileName string) (*Config, *SecureConfig) {
 	// set default configuration
-	viper.SetDefault("MongoURI", "mongodb://localhost:27017")
+	viper.SetDefault("MongoURI", "mongodb://localhost:27017/?directConnection=true")
 	viper.SetDefault("RedisURI", "localhost:6379")
 	viper.SetDefault("JWTPrivateKeyPEM", `-----BEGIN PRIVATE KEY-----
 MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCsTXWAE1NG6IVw
