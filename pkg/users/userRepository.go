@@ -17,8 +17,9 @@ type UserRepository interface {
 // CreateUser
 
 type CreateUserRequest struct {
-	Name  string
-	Email string
+	Name         string
+	Email        string
+	PasswordHash string
 }
 
 type CreateUserResponse struct {

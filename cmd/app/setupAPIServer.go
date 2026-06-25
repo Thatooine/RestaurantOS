@@ -36,12 +36,8 @@ func setupAPIServer(serviceProviders ServiceProviders) {
 	emailPasswordAdaptor := authentication.NewEmailAndPasswordAuthenticatorRESTAdaptor(serviceProviders.EmailAndPasswordAuthenticatorService)
 	router.Handle("/api/v1/auth/login", ipRateLimiter(http.HandlerFunc(emailPasswordAdaptor.Login))).Methods(http.MethodPost)
 
-	firebaseAdaptor := authentication.NewFirebaseAuthenticatorRESTAdaptor(serviceProviders.FirebaseAuthenticatorService)
-	router.HandleFunc("/api/v1/auth/firebase", firebaseAdaptor.Login).Methods(http.MethodPost)
-
 	registrationAdaptor := users.NewUserRegistrationRESTAdaptor(serviceProviders.UserRegistrationService)
 	router.HandleFunc("/api/v1/auth/register", registrationAdaptor.RegisterWithEmailAndPassword).Methods(http.MethodPost)
-	router.HandleFunc("/api/v1/auth/register/firebase", registrationAdaptor.RegisterWithFirebaseToken).Methods(http.MethodPost)
 
 	// authenticated API subrouter
 	api := router.PathPrefix("/api/v1").Subrouter()

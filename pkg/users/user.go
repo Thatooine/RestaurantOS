@@ -25,4 +25,6 @@ type User struct {
 	Email string `json:"email" bson:"email"`
 	// Roles assigned to the user
 	Roles []Role `json:"roles" bson:"roles"`
+	// Bcrypt hash of the user's password. Never serialized to JSON.
+	PasswordHash string `json:"-" bson:"passwordHash"`
 }

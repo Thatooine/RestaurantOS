@@ -7,85 +7,95 @@ import (
 
 	authMock "github.com/bash/the-dancing-pony-v2-rnyfbr/internal/pkg/authentication"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/authentication"
+	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/errs"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/users"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// --- getOrCreateUser tests ---
+// --- RegisterWithEmailAndPassword tests ---
 
-func TestGetOrCreateUser_ReturnsExistingUser(t *testing.T) {
-	existingUser := users.User{ID: "user-1", Name: "Frodo", Email: "frodo@shire.com", Roles: []users.Role{users.RoleCustomer}}
-
-	repo := &UserRepositoryMock{
-		GetUserFn: func(_ context.Context, req users.GetUserRequest) (*users.GetUserResponse, error) {
-			if req.Email != "frodo@shire.com" {
-				t.Fatalf("expected email frodo@shire.com, got %s", req.Email)
-			}
-			return &users.GetUserResponse{User: existingUser}, nil
-		},
-		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
-			t.Fatal("CreateUser should not be called when user exists")
-			return nil, nil
-		},
-	}
-
-	svc := &UserRegistrationServiceImpl{
-		userRepository: repo,
-	}
-
-	user, err := svc.getOrCreateUser(context.Background(), "Frodo", "frodo@shire.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if user.ID != "user-1" {
-		t.Errorf("expected user ID user-1, got %s", user.ID)
-	}
-}
-
-func TestGetOrCreateUser_CreatesNewUser(t *testing.T) {
-	newUser := users.User{ID: "user-2", Name: "Sam", Email: "sam@shire.com", Roles: []users.Role{users.RoleCustomer}}
+func TestRegisterWithEmailAndPassword_Success(t *testing.T) {
+	var createReq users.CreateUserRequest
+	newUser := users.User{ID: "user-1", Name: "Frodo", Email: "frodo@shire.com", Roles: []users.Role{users.RoleCustomer}}
 
 	repo := &UserRepositoryMock{
 		GetUserFn: func(_ context.Context, _ users.GetUserRequest) (*users.GetUserResponse, error) {
-			return nil, fmt.Errorf("user not found")
+			return nil, fmt.Errorf("not found: %w", errs.ErrNotFound)
 		},
 		CreateUserFn: func(_ context.Context, req users.CreateUserRequest) (*users.CreateUserResponse, error) {
-			if req.Name != "Sam" || req.Email != "sam@shire.com" {
-				t.Fatalf("unexpected create request: %+v", req)
-			}
+			createReq = req
 			return &users.CreateUserResponse{User: newUser}, nil
 		},
 	}
 
-	svc := &UserRegistrationServiceImpl{
-		userRepository: repo,
+	tokenCreator := &authMock.AccessTokenCreatorServiceMock{
+		CreateAccessTokenFn: func(_ context.Context, _ authentication.CreateAccessTokenRequest) (*authentication.CreateAccessTokenResponse, error) {
+			return &authentication.CreateAccessTokenResponse{AccessToken: "jwt-123"}, nil
+		},
 	}
 
-	user, err := svc.getOrCreateUser(context.Background(), "Sam", "sam@shire.com")
+	svc := &UserRegistrationServiceImpl{
+		accessTokenCreator: tokenCreator,
+		userRepository:     repo,
+	}
+
+	resp, err := svc.RegisterWithEmailAndPassword(context.Background(), users.RegisterWithEmailAndPasswordRequest{
+		Name:     "Frodo",
+		Email:    "frodo@shire.com",
+		Password: "one-ring",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if user.ID != "user-2" {
-		t.Errorf("expected user ID user-2, got %s", user.ID)
+	if resp.Token != "jwt-123" {
+		t.Errorf("expected token jwt-123, got %s", resp.Token)
+	}
+
+	// The stored hash must verify against the original password and must not be the plaintext.
+	if createReq.PasswordHash == "" {
+		t.Fatal("expected a password hash to be stored")
+	}
+	if createReq.PasswordHash == "one-ring" {
+		t.Fatal("password must be hashed, not stored in plaintext")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(createReq.PasswordHash), []byte("one-ring")); err != nil {
+		t.Errorf("stored hash does not match original password: %v", err)
 	}
 }
 
-func TestGetOrCreateUser_CreateFails(t *testing.T) {
+func TestRegisterWithEmailAndPassword_AlreadyExists(t *testing.T) {
 	repo := &UserRepositoryMock{
 		GetUserFn: func(_ context.Context, _ users.GetUserRequest) (*users.GetUserResponse, error) {
-			return nil, fmt.Errorf("user not found")
+			return &users.GetUserResponse{User: users.User{ID: "user-1", Email: "frodo@shire.com"}}, nil
 		},
 		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
-			return nil, fmt.Errorf("database error")
+			t.Fatal("CreateUser should not be called when the email already exists")
+			return nil, nil
 		},
 	}
 
-	svc := &UserRegistrationServiceImpl{
-		userRepository: repo,
-	}
+	svc := &UserRegistrationServiceImpl{userRepository: repo}
 
-	_, err := svc.getOrCreateUser(context.Background(), "Gandalf", "gandalf@istari.com")
+	_, err := svc.RegisterWithEmailAndPassword(context.Background(), users.RegisterWithEmailAndPasswordRequest{
+		Name:     "Frodo",
+		Email:    "frodo@shire.com",
+		Password: "one-ring",
+	})
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestRegisterWithEmailAndPassword_ValidationFails(t *testing.T) {
+	svc := &UserRegistrationServiceImpl{}
+
+	// Missing password
+	_, err := svc.RegisterWithEmailAndPassword(context.Background(), users.RegisterWithEmailAndPasswordRequest{
+		Name:  "Frodo",
+		Email: "frodo@shire.com",
+	})
+	if err == nil {
+		t.Fatal("expected validation error, got nil")
 	}
 }
 
@@ -138,98 +148,5 @@ func TestIssueToken_TokenCreationFails(t *testing.T) {
 	_, err := svc.issueToken(context.Background(), users.User{ID: "user-1", Email: "test@test.com"})
 	if err == nil {
 		t.Fatal("expected error, got nil")
-	}
-}
-
-// --- Full registration flow tests (getOrCreateUser + issueToken) ---
-
-func TestRegistrationFlow_NewUser(t *testing.T) {
-	newUser := users.User{ID: "user-1", Name: "Frodo", Email: "frodo@shire.com", Roles: []users.Role{users.RoleCustomer}}
-
-	repo := &UserRepositoryMock{
-		GetUserFn: func(_ context.Context, _ users.GetUserRequest) (*users.GetUserResponse, error) {
-			return nil, fmt.Errorf("not found")
-		},
-		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
-			return &users.CreateUserResponse{User: newUser}, nil
-		},
-	}
-
-	tokenCreator := &authMock.AccessTokenCreatorServiceMock{
-		CreateAccessTokenFn: func(_ context.Context, _ authentication.CreateAccessTokenRequest) (*authentication.CreateAccessTokenResponse, error) {
-			return &authentication.CreateAccessTokenResponse{AccessToken: "jwt-123"}, nil
-		},
-	}
-
-	svc := &UserRegistrationServiceImpl{
-		accessTokenCreator: tokenCreator,
-		userRepository:     repo,
-	}
-
-	user, err := svc.getOrCreateUser(context.Background(), "Frodo", "frodo@shire.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	resp, err := svc.issueToken(context.Background(), user)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Token != "jwt-123" {
-		t.Errorf("expected token jwt-123, got %s", resp.Token)
-	}
-	if resp.UserID != "user-1" {
-		t.Errorf("expected user ID user-1, got %s", resp.UserID)
-	}
-}
-
-func TestRegistrationFlow_RecoveryFromPartialRegistration(t *testing.T) {
-	// User already exists in DB (Firebase succeeded before, DB creation succeeded, but token failed)
-	existingUser := users.User{ID: "user-1", Name: "Frodo", Email: "frodo@shire.com", Roles: []users.Role{users.RoleCustomer}}
-
-	createCalled := false
-	repo := &UserRepositoryMock{
-		GetUserFn: func(_ context.Context, req users.GetUserRequest) (*users.GetUserResponse, error) {
-			if req.Email == "frodo@shire.com" {
-				return &users.GetUserResponse{User: existingUser}, nil
-			}
-			return nil, fmt.Errorf("not found")
-		},
-		CreateUserFn: func(_ context.Context, _ users.CreateUserRequest) (*users.CreateUserResponse, error) {
-			createCalled = true
-			t.Fatal("CreateUser should not be called when user already exists")
-			return nil, nil
-		},
-	}
-
-	tokenCreator := &authMock.AccessTokenCreatorServiceMock{
-		CreateAccessTokenFn: func(_ context.Context, _ authentication.CreateAccessTokenRequest) (*authentication.CreateAccessTokenResponse, error) {
-			return &authentication.CreateAccessTokenResponse{AccessToken: "recovered-jwt"}, nil
-		},
-	}
-
-	svc := &UserRegistrationServiceImpl{
-		accessTokenCreator: tokenCreator,
-		userRepository:     repo,
-	}
-
-	// Simulate retry: user exists, should skip creation
-	user, err := svc.getOrCreateUser(context.Background(), "Frodo", "frodo@shire.com")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if user.ID != "user-1" {
-		t.Errorf("expected existing user ID, got %s", user.ID)
-	}
-
-	resp, err := svc.issueToken(context.Background(), user)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Token != "recovered-jwt" {
-		t.Errorf("expected recovered-jwt, got %s", resp.Token)
-	}
-	if createCalled {
-		t.Error("CreateUser should not have been called")
 	}
 }

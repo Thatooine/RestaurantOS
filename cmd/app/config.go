@@ -10,36 +10,29 @@ import (
 // This configuration contains secrets such as API keys, private keys, and database credentials.
 // The values below are hardcoded for local development and testing purposes ONLY.
 //
-// In a production environment, ALL sensitive values (FirebaseWebAPIKey, JWTPrivateKeyPEM,
+// In a production environment, ALL sensitive values (JWTPrivateKeyPEM,
 // MongoURI, RedisURI, etc.) MUST be sourced from a secure secret store (e.g. AWS Secrets
 // Manager, HashiCorp Vault, GCP Secret Manager) or injected via environment
 // variables — NEVER hardcoded in source code.
 
 func init() {
-	viper.MustBindEnv("FirebaseWebAPIKey", "FIREBASE_WEB_API_KEY")
-	viper.MustBindEnv("FirebaseServiceAccountPath", "FIREBASE_SERVICE_ACCOUNT_PATH")
 	viper.MustBindEnv("MongoURI", "MONGO_URI")
 	viper.MustBindEnv("RedisURI", "REDIS_URI")
 	viper.MustBindEnv("JWTPrivateKeyPEM", "JWT_PRIVATE_KEY_PEM")
 }
 
 // Config holds all non-secret app configuration
-type Config struct {
-	FirebaseServiceAccountPath string
-}
+type Config struct{}
 
 // SecureConfig holds all secret application configuration
 type SecureConfig struct {
-	FirebaseWebAPIKey string
-	MongoURI          string
-	RedisURI          string
-	JWTPrivateKeyPEM  string
+	MongoURI         string
+	RedisURI         string
+	JWTPrivateKeyPEM string
 }
 
 func GetConfig(configFileName string) (*Config, *SecureConfig) {
 	// set default configuration
-	viper.SetDefault("FirebaseWebAPIKey", "AIzaSyBuyyp4nhrFhHWR44mgCfV4hx5TJ8_HQvw")
-	viper.SetDefault("FirebaseServiceAccountPath", "bash_interview_shire_shack_firebase_service_account.json")
 	viper.SetDefault("MongoURI", "mongodb://localhost:27017")
 	viper.SetDefault("RedisURI", "localhost:6379")
 	viper.SetDefault("JWTPrivateKeyPEM", `-----BEGIN PRIVATE KEY-----

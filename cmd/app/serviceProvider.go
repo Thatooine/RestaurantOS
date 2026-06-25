@@ -7,7 +7,6 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	firebase "firebase.google.com/go/v4"
 	authenticationImpl "github.com/bash/the-dancing-pony-v2-rnyfbr/internal/pkg/authentication"
 	rateLimitingImpl "github.com/bash/the-dancing-pony-v2-rnyfbr/internal/pkg/rateLimiting"
 	restaurantsImpl "github.com/bash/the-dancing-pony-v2-rnyfbr/internal/pkg/restaurants"
@@ -19,7 +18,6 @@ import (
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/users"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/redis/go-redis/v9"
-	"google.golang.org/api/option"
 )
 
 type ServiceProviders struct {
@@ -32,7 +30,6 @@ type ServiceProviders struct {
 	RestaurantRepository                 restaurants.RestaurantRepository
 	RestaurantService                    restaurants.RestaurantService
 	RestaurantRegistrationService        restaurants.RestaurantRegistrationService
-	FirebaseAuthenticatorService         authentication.FirebaseAuthenticatorService
 	EmailAndPasswordAuthenticatorService authentication.EmailAndPasswordAuthenticatorService
 	UserRegistrationService              users.UserRegistrationService
 	AccessTokenCreatorService            authentication.AccessTokenCreator
@@ -81,15 +78,6 @@ func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureCo
 		return nil, fmt.Errorf("failed to create token signer: %w", err)
 	}
 
-	// Initialize Firebase app using service account credentials file.
-	firebaseApp, err := firebase.NewApp(ctx,
-		&firebase.Config{ProjectID: "bash-interview-project"},
-		option.WithCredentialsFile(conf.FirebaseServiceAccountPath),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize firebase app: %w", err)
-	}
-
 	// redis client
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: secureConf.RedisURI,
@@ -102,9 +90,8 @@ func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureCo
 	// authentication services
 	accessTokenCreator := authenticationImpl.NewAccessTokenCreatorServiceImpl(tokenSigner)
 	accessTokenValidator := authenticationImpl.NewAccessTokenValidatorImpl(&privateKey.PublicKey)
-	registrationService := usersImpl.NewUserRegistrationServiceImpl(firebaseApp, accessTokenCreator, userRepository, secureConf.FirebaseWebAPIKey)
-	firebaseAuthenticator := authenticationImpl.NewFirebaseAuthenticatorService(firebaseApp, accessTokenCreator, userRepository)
-	emailPasswordAuthenticator := authenticationImpl.NewEmailAndPasswordAuthenticatorService(accessTokenCreator, userRepository, secureConf.FirebaseWebAPIKey)
+	registrationService := usersImpl.NewUserRegistrationServiceImpl(accessTokenCreator, userRepository)
+	emailPasswordAuthenticator := authenticationImpl.NewEmailAndPasswordAuthenticatorService(accessTokenCreator, userRepository)
 
 	return &ServiceProviders{
 		UserRepository:                       userRepository,
@@ -117,7 +104,6 @@ func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureCo
 		RestaurantService:                    restaurantService,
 		RestaurantRegistrationService:        restaurantRegistrar,
 		UserRegistrationService:              registrationService,
-		FirebaseAuthenticatorService:         firebaseAuthenticator,
 		EmailAndPasswordAuthenticatorService: emailPasswordAuthenticator,
 		AccessTokenCreatorService:            accessTokenCreator,
 		AccessTokenValidatorService:          accessTokenValidator,

@@ -16,6 +16,10 @@ func (r *CreateUserRequest) Validate() error {
 		reasons = append(reasons, "Email is required")
 	}
 
+	if r.PasswordHash == "" {
+		reasons = append(reasons, "PasswordHash is required")
+	}
+
 	if len(reasons) > 0 {
 		return fmt.Errorf("validation failed: %s", strings.Join(reasons, "; "))
 	}

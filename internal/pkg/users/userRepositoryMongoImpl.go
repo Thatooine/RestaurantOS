@@ -42,10 +42,11 @@ func (r *UserRepositoryMongoImpl) CreateUser(ctx context.Context, request users.
 	}
 
 	user := users.User{
-		ID:    users.NewID(),
-		Name:  request.Name,
-		Email: request.Email,
-		Roles: []users.Role{users.RoleCustomer},
+		ID:           users.NewID(),
+		Name:         request.Name,
+		Email:        request.Email,
+		Roles:        []users.Role{users.RoleCustomer},
+		PasswordHash: request.PasswordHash,
 	}
 
 	if _, err := r.collection().InsertOne(ctx, user); err != nil {
