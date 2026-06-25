@@ -1,0 +1,526 @@
+{
+	"info": {
+		"name": "The Shire Shack API",
+		"description": "Postman collection for The Shire Shack REST API (v1).\n\nThe API is served at `http://localhost:8080`. Most endpoints under `/api/v1` require authentication via a Bearer token (`Authorization: Bearer <token>`) or the `access_token` cookie.\n\n## Getting started\n1. Run **Auth > Register (email & password)** or **Auth > Login (email & password)**. A test script automatically stores the returned `token` in the `token` collection variable.\n2. All authenticated requests use that `token` via collection-level Bearer auth.\n\n## Variables\n- `baseUrl` — API base URL (default `http://localhost:8080`)\n- `token` — access token, set automatically by login/register\n- `restaurantId`, `dishId`, `userEmail` — convenience placeholders for path params",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "restaurantId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "dishId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "userEmail",
+			"value": "user@example.com",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "System",
+			"item": [
+				{
+					"name": "Health check",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						},
+						"description": "Liveness check. Returns `{\"status\":\"ok\"}`."
+					},
+					"response": []
+				},
+				{
+					"name": "Metrics (Prometheus)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/metrics",
+							"host": ["{{baseUrl}}"],
+							"path": ["metrics"]
+						},
+						"description": "Prometheus scrape endpoint."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Register (email & password)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var json = pm.response.json();",
+									"    if (json.token) { pm.collectionVariables.set('token', json.token); }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Frodo Baggins\",\n    \"email\": \"user@example.com\",\n    \"password\": \"s3cr3tpassword\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "register"]
+						},
+						"description": "Register a new user with email and password. On success returns 201 with `{userID, email}` and sets an `access_token` cookie. The test script stores the token if present in the body."
+					},
+					"response": []
+				},
+				{
+					"name": "Register (firebase token)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Frodo Baggins\",\n    \"firebaseToken\": \"<firebase-id-token>\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register/firebase",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "register", "firebase"]
+						},
+						"description": "Register a new user with a Firebase ID token. Returns 201 with `{userID, email}` and sets an `access_token` cookie."
+					},
+					"response": []
+				},
+				{
+					"name": "Login (email & password)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var json = pm.response.json();",
+									"    if (json.token) { pm.collectionVariables.set('token', json.token); }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"s3cr3tpassword\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "login"]
+						},
+						"description": "Authenticate with email and password. Rate limited by IP (5/min). Returns `{token, userID, email}`. The test script stores `token` in the collection variable."
+					},
+					"response": []
+				},
+				{
+					"name": "Login (firebase token)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"firebaseToken\": \"<firebase-id-token>\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/firebase",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "firebase"]
+						},
+						"description": "Authenticate with a Firebase ID token. Returns `{userID, email}` and sets an `access_token` HTTP-only cookie."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "List users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users?offset=0&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users"],
+							"query": [
+								{ "key": "offset", "value": "0" },
+								{ "key": "limit", "value": "20" }
+							]
+						},
+						"description": "List users with pagination. Defaults: `limit=20`."
+					},
+					"response": []
+				},
+				{
+					"name": "Search users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/search?q=frodo&offset=0&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "search"],
+							"query": [
+								{ "key": "q", "value": "frodo" },
+								{ "key": "offset", "value": "0" },
+								{ "key": "limit", "value": "20" }
+							]
+						},
+						"description": "Search users by query string `q`."
+					},
+					"response": []
+				},
+				{
+					"name": "Get user by email",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/users/{{userEmail}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "users", "{{userEmail}}"]
+						},
+						"description": "Get a single user by email address."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Restaurants",
+			"item": [
+				{
+					"name": "Register restaurant",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code < 300) {",
+									"    var json = pm.response.json();",
+									"    if (json.restaurant && json.restaurant.id) { pm.collectionVariables.set('restaurantId', json.restaurant.id); }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"The Shire Shack\",\n    \"city\": \"Hobbiton\",\n    \"image\": \"https://example.com/shack.png\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/restaurants/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "restaurants", "register"]
+						},
+						"description": "Register a restaurant owned by the authenticated user. Stores the returned restaurant id in `restaurantId`."
+					},
+					"response": []
+				},
+				{
+					"name": "List restaurants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/restaurants?offset=0&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "restaurants"],
+							"query": [
+								{ "key": "offset", "value": "0" },
+								{ "key": "limit", "value": "20" }
+							]
+						},
+						"description": "List restaurants with pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get my restaurant",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/restaurants/mine",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "restaurants", "mine"]
+						},
+						"description": "Get the restaurant owned by the authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Search restaurants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/restaurants/search?q=shire&offset=0&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "restaurants", "search"],
+							"query": [
+								{ "key": "q", "value": "shire" },
+								{ "key": "offset", "value": "0" },
+								{ "key": "limit", "value": "20" }
+							]
+						},
+						"description": "Search restaurants by query string `q`."
+					},
+					"response": []
+				},
+				{
+					"name": "Get restaurant by id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/restaurants/{{restaurantId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "restaurants", "{{restaurantId}}"]
+						},
+						"description": "Get a single restaurant by id."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Dishes",
+			"item": [
+				{
+					"name": "Create dish",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code < 300) {",
+									"    var json = pm.response.json();",
+									"    if (json.dish && json.dish.id) { pm.collectionVariables.set('dishId', json.dish.id); }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Second Breakfast Platter\",\n    \"description\": \"Eggs, sausages, mushrooms and toast.\",\n    \"price\": 12.5,\n    \"restaurant_id\": \"{{restaurantId}}\",\n    \"image\": \"https://example.com/platter.png\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes"]
+						},
+						"description": "Create a dish for a restaurant. Stores the returned dish id in `dishId`."
+					},
+					"response": []
+				},
+				{
+					"name": "List dishes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes?restaurant_id={{restaurantId}}&offset=0&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes"],
+							"query": [
+								{ "key": "restaurant_id", "value": "{{restaurantId}}" },
+								{ "key": "offset", "value": "0" },
+								{ "key": "limit", "value": "20" }
+							]
+						},
+						"description": "List dishes, optionally filtered by `restaurant_id`."
+					},
+					"response": []
+				},
+				{
+					"name": "Search dishes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes/search?q=breakfast&offset=0&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes", "search"],
+							"query": [
+								{ "key": "q", "value": "breakfast" },
+								{ "key": "offset", "value": "0" },
+								{ "key": "limit", "value": "20" }
+							]
+						},
+						"description": "Search dishes by query string `q`."
+					},
+					"response": []
+				},
+				{
+					"name": "Get dish by id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes/{{dishId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes", "{{dishId}}"]
+						},
+						"description": "Get a single dish by id."
+					},
+					"response": []
+				},
+				{
+					"name": "Update dish",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Second Breakfast Platter (Large)\",\n    \"description\": \"Now with extra mushrooms.\",\n    \"price\": 14.0,\n    \"image\": \"https://example.com/platter-large.png\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes/{{dishId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes", "{{dishId}}"]
+						},
+						"description": "Update an existing dish by id."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete dish",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes/{{dishId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes", "{{dishId}}"]
+						},
+						"description": "Delete a dish by id."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Ratings",
+			"item": [
+				{
+					"name": "Submit rating",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dish_id\": \"{{dishId}}\",\n    \"score\": 5,\n    \"review\": \"Best second breakfast in the Shire.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes/{{dishId}}/ratings",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes", "{{dishId}}", "ratings"]
+						},
+						"description": "Submit a rating (score + optional review) for a dish."
+					},
+					"response": []
+				},
+				{
+					"name": "List ratings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/dishes/{{dishId}}/ratings?offset=0&limit=20",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "dishes", "{{dishId}}", "ratings"],
+							"query": [
+								{ "key": "offset", "value": "0" },
+								{ "key": "limit", "value": "20" }
+							]
+						},
+						"description": "List ratings for a dish with pagination."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
