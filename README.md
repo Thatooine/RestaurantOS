@@ -20,7 +20,7 @@ To start the entire stack (infrastructure, bootstrap, API server, and UI) in one
 ./scripts/start.sh
 ```
 
-This will start MongoDB, Redis, Prometheus, Grafana, seed the database, launch the Go API on `:8080`, and the React UI on `:5173`. Press `Ctrl+C` to stop everything.
+This will start the infrastructure (MongoDB, Redis, RabbitMQ, Prometheus, Grafana), seed the database, launch the Go API on `:8080`, and the React UI on `:5173`. Press `Ctrl+C` to stop everything.
 
 ---
 
@@ -28,7 +28,7 @@ If you prefer to start each component manually, follow the steps below.
 
 ### 1. Start Infrastructure
 
-From the project root, bring up MongoDB and Redis:
+From the project root, bring up the infrastructure:
 
 ```shell
 docker-compose up -d
@@ -37,6 +37,7 @@ docker-compose up -d
 This starts:
 - MongoDB on `localhost:27017`, running as a single-node replica set (`rs0`) so multi-document transactions work. The replica set is initiated automatically by the container's healthcheck a few seconds after startup; clients connect with `?directConnection=true`.
 - Redis on `localhost:6379`
+- RabbitMQ on `localhost:5672` (management UI at `localhost:15672`, guest/guest)
 - Prometheus on `localhost:9090`
 - Grafana on `localhost:3000` (admin/admin; Prometheus datasource auto-provisioned)
 
@@ -108,7 +109,7 @@ Browser (React SPA)
 Go HTTP Server (gorilla/mux)
     |
     |-- Logger Middleware
-    |-- Auth Middleware (JWT via Firebase)
+    |-- Auth Middleware (app-issued JWT)
     |-- User Rate Limiter Middleware (Redis token bucket, per-user)
     |
     |-- IP Rate Limiter Middleware (Redis token bucket, per-IP, login only)
@@ -135,9 +136,7 @@ MongoDB          Redis
 | GET | `/health` | Health check |
 | GET | `/metrics` | Prometheus metrics scrape endpoint |
 | POST | `/api/v1/auth/login` | Login with email/password (IP rate-limited) |
-| POST | `/api/v1/auth/firebase` | Login with Firebase token |
 | POST | `/api/v1/auth/register` | Register with email/password |
-| POST | `/api/v1/auth/register/firebase` | Register with Firebase token |
 
 **Authenticated** (require JWT via `Authorization: Bearer` header or `access_token` cookie):
 
@@ -162,8 +161,8 @@ MongoDB          Redis
 
 ### Authentication
 
-- Firebase handles identity (email/password and Google OAuth)
-- The API issues its own JWT; the token can be provided in two ways:
+- The API authenticates users by email/password and issues its own JWT
+- The token can be provided in two ways:
   - **Cookie:** `access_token` (set automatically by the login/register endpoints as an HttpOnly cookie)
   - **Header:** `Authorization: Bearer <token>`
 - All authenticated routes validate the JWT via middleware
@@ -217,7 +216,7 @@ cmd/
   app/              # API server entry point and wiring
   bootstrap/        # Database seed and index creation
 internal/pkg/       # Private service implementations
-  authentication/   # Firebase + JWT auth
+  authentication/   # JWT issuance & validation, email/password auth
   rateLimiting/     # Redis rate limiter implementation
   restaurants/      # Restaurant, dish, rating services
   users/            # User services
