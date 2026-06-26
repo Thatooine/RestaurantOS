@@ -1,4 +1,4 @@
-# The Orc Shack
+# RestaurantOS
 
 ## Introduction
 
