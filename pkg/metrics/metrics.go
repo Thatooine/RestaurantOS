@@ -7,8 +7,19 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+// register collectors
+func init() {
+	prometheus.MustRegister(
+		requestsTotal,
+		requestDuration,
+		requestsInFlight, collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
+}
 
 var (
 	requestsTotal = prometheus.NewCounterVec(
@@ -35,10 +46,6 @@ var (
 		},
 	)
 )
-
-func init() {
-	prometheus.MustRegister(requestsTotal, requestDuration, requestsInFlight)
-}
 
 // Handler returns an http.Handler that exposes Prometheus metrics.
 func Handler() http.Handler {
