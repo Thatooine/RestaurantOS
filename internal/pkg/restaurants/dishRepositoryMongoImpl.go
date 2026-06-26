@@ -12,7 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-const databaseName = "shire_shack"
+const databaseName = "restaurantos"
 
 // DishRepositoryMongoImpl implements restaurants.DishRepository using the MongoDB
 // client directly for the "dishes" collection. It performs pure persistence only —

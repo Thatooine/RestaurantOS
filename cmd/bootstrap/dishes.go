@@ -47,7 +47,7 @@ var seedDishes = []restaurants.Dish{
 }
 
 func seedDishesAndRestaurant(ctx context.Context, client *mongo.Client) {
-	db := client.Database("shire_shack")
+	db := client.Database("restaurantos")
 
 	// Clear and seed restaurant
 	restaurantCol := db.Collection("restaurants")

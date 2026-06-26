@@ -13,7 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-const databaseName = "shire_shack"
+const databaseName = "restaurantos"
 
 // UserRepositoryMongoImpl implements users.UserRepository using the MongoDB
 // client directly for the "users" collection. It combines user creation and

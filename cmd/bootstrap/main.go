@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-const databaseName = "shire_shack"
+const databaseName = "restaurantos"
 
 func main() {
 	ctx := context.Background()

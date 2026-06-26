@@ -69,7 +69,7 @@ Mirror `internal/pkg/users/userRepositoryMongoImpl.go` / `internal/pkg/restauran
 
 - `package <domain>` under `internal/pkg`, importing the port as `"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/<domain>"` and the driver as `"go.mongodb.org/mongo-driver/v2/mongo"`, `".../mongo/options"`, `".../bson"`.
 - Struct `<Entity>RepositoryMongoImpl{ client *mongo.Client }` + `New<Entity>RepositoryMongoImpl(client *mongo.Client)`.
-- A `databaseName` const (`"shire_shack"`) is declared once per `internal/pkg/<domain>` package, plus a `collection() *mongo.Collection` helper returning `r.client.Database(databaseName).Collection("<plural>")`. Every method goes through `r.collection()`.
+- A `databaseName` const (`"restaurantos"`) is declared once per `internal/pkg/<domain>` package, plus a `collection() *mongo.Collection` helper returning `r.client.Database(databaseName).Collection("<plural>")`. Every method goes through `r.collection()`.
 - Add a compile-time assertion: `var _ <domain>.<Entity>Repository = &<Entity>RepositoryMongoImpl{}` (drift breaks the build).
 - **Every method starts with** `request.Validate()` — on failure `log.Ctx(ctx).Error().Err(err).Msg(...)` and return `fmt.Errorf("invalid request for <Method>: %w", err)`.
 - **Create:** build the entity with a fresh ID — use the domain's helper if it exists (`users.NewID()`); otherwise `uuid.New().String()` (`github.com/google/uuid`). Then `r.collection().InsertOne(ctx, entity)`; wrap errors as `fmt.Errorf("<Method> failed: %w", err)`.

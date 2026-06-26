@@ -17,7 +17,7 @@ import (
 const defaultRootPassword = "rootpassword"
 
 func createRootUser(ctx context.Context, client *mongo.Client) {
-	collection := client.Database("shire_shack").Collection("users")
+	collection := client.Database("restaurantos").Collection("users")
 
 	if _, err := collection.DeleteMany(ctx, bson.M{}); err != nil {
 		log.Fatalf("failed to clear users collection: %v", err)
