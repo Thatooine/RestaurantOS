@@ -50,18 +50,11 @@ until curl -sf http://localhost:8080/health >/dev/null 2>&1; do
     sleep 1
 done
 echo "==> App is ready at http://localhost:8080"
-
-echo "==> Starting UI dev server..."
-cd "$ROOT_DIR/web"
-yarn install
-yarn dev &
-UI_PID=$!
 cd "$ROOT_DIR"
 
 echo ""
 echo "==> Stack is running:"
 echo "    API: http://localhost:8080"
-echo "    UI:  http://localhost:5173"
 echo ""
 echo "Press Ctrl+C to stop."
 wait "$APP_PID"

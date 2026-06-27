@@ -12,6 +12,7 @@ import (
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/restaurants"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/users"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 )
 
@@ -23,7 +24,7 @@ func setupAPIServer(serviceProviders ServiceProviders) {
 	router.Use(metrics.Middleware)
 
 	// prometheus scrape endpoint
-	router.Handle("/metrics", metrics.Handler()).Methods(http.MethodGet)
+	router.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
 
 	// health check
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

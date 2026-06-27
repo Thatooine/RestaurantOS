@@ -7,8 +7,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // register collectors
@@ -16,8 +14,7 @@ func init() {
 	prometheus.MustRegister(
 		requestsTotal,
 		requestDuration,
-		requestsInFlight, collectors.NewGoCollector(),
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		requestsInFlight,
 	)
 }
 
@@ -46,11 +43,6 @@ var (
 		},
 	)
 )
-
-// Handler returns an http.Handler that exposes Prometheus metrics.
-func Handler() http.Handler {
-	return promhttp.Handler()
-}
 
 // Middleware records request count, duration, and in-flight gauge for each request.
 // It uses the gorilla/mux route template as the "route" label to keep cardinality bounded.
