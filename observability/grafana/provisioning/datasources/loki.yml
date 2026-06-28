@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      # Turn the trace_id carried on each OTel log record into a clickable link.
+      # Point datasourceUid at a Tempo datasource once tracing is added.
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: "$${__value.raw}"
