@@ -20,7 +20,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type ServiceProviders struct {
+type App struct {
 	UserRepository                       users.UserRepository
 	UserService                          users.UserService
 	DishRepository                       restaurants.DishRepository
@@ -37,7 +37,7 @@ type ServiceProviders struct {
 	RateLimiter                          rateLimiting.RedisTokenBucketRateLimiter
 }
 
-func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureConfig) (*ServiceProviders, error) {
+func NewApp(ctx context.Context, conf *Config, secureConf *SecureConfig) (*App, error) {
 	mongoClient, err := pkgMongo.NewClient(ctx, secureConf.MongoURI)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func NewServiceProviders(ctx context.Context, conf *Config, secureConf *SecureCo
 	registrationService := usersImpl.NewUserRegistrationServiceImpl(accessTokenCreator, userRepository)
 	emailPasswordAuthenticator := authenticationImpl.NewEmailAndPasswordAuthenticatorService(accessTokenCreator, userRepository)
 
-	return &ServiceProviders{
+	return &App{
 		UserRepository:                       userRepository,
 		UserService:                          userService,
 		DishRepository:                       dishRepository,

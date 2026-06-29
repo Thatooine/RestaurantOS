@@ -26,13 +26,13 @@ func main() {
 
 	config, secureConfig := GetConfig("")
 
-	serviceProviders, err := NewServiceProviders(ctx, config, secureConfig)
+	app, err := NewApp(ctx, config, secureConfig)
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create service providers")
+		log.Fatal().Err(err).Msg("failed to create app")
 	}
 
 	// setup the server communications here
-	setupAPIServer(*serviceProviders)
+	setupAPIServer(*app)
 
 	// shut down signal
 	signals := make(chan os.Signal, 1)
