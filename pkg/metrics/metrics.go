@@ -1,11 +1,11 @@
 package metrics
 
 import (
-	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -44,51 +44,33 @@ var (
 	)
 )
 
-// Middleware records request count, duration, and in-flight gauge for each request.
-// It uses the gorilla/mux route template as the "route" label to keep cardinality bounded.
-func Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// Middleware records request count, duration, and in-flight requests. Gin route
+// patterns are normalized to the API's canonical label format so existing
+// Prometheus series remain backward compatible and bounded.
+func Middleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
 		requestsInFlight.Inc()
 		defer requestsInFlight.Dec()
 
-		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
+		c.Next()
 
-		next.ServeHTTP(rw, r)
-
-		route := routeTemplate(r)
-		requestDuration.WithLabelValues(r.Method, route).Observe(time.Since(start).Seconds())
-		requestsTotal.WithLabelValues(r.Method, route, strconv.Itoa(rw.status)).Inc()
-	})
+		route := canonicalRoute(c.FullPath())
+		requestDuration.WithLabelValues(c.Request.Method, route).Observe(time.Since(start).Seconds())
+		requestsTotal.WithLabelValues(c.Request.Method, route, strconv.Itoa(c.Writer.Status())).Inc()
+	}
 }
 
-func routeTemplate(r *http.Request) string {
-	if current := mux.CurrentRoute(r); current != nil {
-		if tmpl, err := current.GetPathTemplate(); err == nil {
-			return tmpl
+func canonicalRoute(route string) string {
+	if route == "" {
+		return "unmatched"
+	}
+
+	segments := strings.Split(route, "/")
+	for i, segment := range segments {
+		if len(segment) > 1 && (segment[0] == ':' || segment[0] == '*') {
+			segments[i] = "{" + segment[1:] + "}"
 		}
 	}
-	return "unmatched"
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status      int
-	wroteHeader bool
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	if s.wroteHeader {
-		return
-	}
-	s.status = code
-	s.wroteHeader = true
-	s.ResponseWriter.WriteHeader(code)
-}
-
-func (s *statusRecorder) Write(b []byte) (int, error) {
-	if !s.wroteHeader {
-		s.wroteHeader = true
-	}
-	return s.ResponseWriter.Write(b)
+	return strings.Join(segments, "/")
 }

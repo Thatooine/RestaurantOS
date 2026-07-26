@@ -7,7 +7,7 @@ import (
 
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/authentication"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/errs"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
@@ -27,18 +27,18 @@ type GetDishRESTResponse struct {
 	Dish Dish `json:"dish"`
 }
 
-func (a *DishServiceRESTAdaptor) GetDish(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
+func (a *DishServiceRESTAdaptor) GetDish(c *gin.Context) {
+	ctx := c.Request.Context()
+	id := c.Param("id")
 
-	resp, err := a.service.GetDish(r.Context(), GetDishRequest{ID: id})
+	resp, err := a.service.GetDish(ctx, GetDishRequest{ID: id})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get dish")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to get dish")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(GetDishRESTResponse{Dish: resp.Dish})
+	c.JSON(http.StatusOK, GetDishRESTResponse{Dish: resp.Dish})
 }
 
 // ListDishes
@@ -48,8 +48,9 @@ type ListDishesRESTResponse struct {
 	Total  int64  `json:"total"`
 }
 
-func (a *DishServiceRESTAdaptor) ListDishes(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (a *DishServiceRESTAdaptor) ListDishes(c *gin.Context) {
+	ctx := c.Request.Context()
+	query := c.Request.URL.Query()
 	restaurantID := query.Get("restaurant_id")
 	offset, _ := strconv.Atoi(query.Get("offset"))
 	limit, _ := strconv.Atoi(query.Get("limit"))
@@ -58,19 +59,18 @@ func (a *DishServiceRESTAdaptor) ListDishes(w http.ResponseWriter, r *http.Reque
 		limit = 20
 	}
 
-	resp, err := a.service.ListDishes(r.Context(), ListDishesRequest{
+	resp, err := a.service.ListDishes(ctx, ListDishesRequest{
 		RestaurantID: restaurantID,
 		Offset:       offset,
 		Limit:        limit,
 	})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to list dishes")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to list dishes")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ListDishesRESTResponse{
+	c.JSON(http.StatusOK, ListDishesRESTResponse{
 		Dishes: resp.Dishes,
 		Total:  resp.Total,
 	})
@@ -83,8 +83,9 @@ type SearchDishesRESTResponse struct {
 	Total  int64  `json:"total"`
 }
 
-func (a *DishServiceRESTAdaptor) SearchDishes(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (a *DishServiceRESTAdaptor) SearchDishes(c *gin.Context) {
+	ctx := c.Request.Context()
+	query := c.Request.URL.Query()
 	q := query.Get("q")
 	offset, _ := strconv.Atoi(query.Get("offset"))
 	limit, _ := strconv.Atoi(query.Get("limit"))
@@ -94,20 +95,19 @@ func (a *DishServiceRESTAdaptor) SearchDishes(w http.ResponseWriter, r *http.Req
 	}
 
 	resp, err := a.service.SearchDishes(
-		r.Context(),
+		ctx,
 		SearchDishesRequest{
 			Query:  q,
 			Offset: offset,
 			Limit:  limit,
 		})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to search dishes")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to search dishes")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SearchDishesRESTResponse{
+	c.JSON(http.StatusOK, SearchDishesRESTResponse{
 		Dishes: resp.Dishes,
 		Total:  resp.Total,
 	})
@@ -127,26 +127,23 @@ type CreateDishRESTResponse struct {
 	Dish Dish `json:"dish"`
 }
 
-func (a *DishServiceRESTAdaptor) CreateDish(w http.ResponseWriter, r *http.Request) {
-	claim, ok := authentication.LoginClaimFromContext(r.Context())
+func (a *DishServiceRESTAdaptor) CreateDish(c *gin.Context) {
+	ctx := c.Request.Context()
+	claim, ok := authentication.LoginClaimFromGinContext(c)
 	if !ok {
-		log.Ctx(r.Context()).Warn().Msg("no login claim in context")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		log.Ctx(ctx).Warn().Msg("no login claim in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	var request CreateDishRESTRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to decode create dish request")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("failed to decode create dish request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := a.service.CreateDish(r.Context(), CreateDishRequest{
+	resp, err := a.service.CreateDish(ctx, CreateDishRequest{
 		UserID:       claim.UserID,
 		Name:         request.Name,
 		Description:  request.Description,
@@ -155,14 +152,12 @@ func (a *DishServiceRESTAdaptor) CreateDish(w http.ResponseWriter, r *http.Reque
 		Image:        request.Image,
 	})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to create dish")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to create dish")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(CreateDishRESTResponse{Dish: resp.Dish})
+	c.JSON(http.StatusCreated, CreateDishRESTResponse{Dish: resp.Dish})
 }
 
 // UpdateDish
@@ -178,28 +173,25 @@ type UpdateDishRESTResponse struct {
 	Dish Dish `json:"dish"`
 }
 
-func (a *DishServiceRESTAdaptor) UpdateDish(w http.ResponseWriter, r *http.Request) {
-	claim, ok := authentication.LoginClaimFromContext(r.Context())
+func (a *DishServiceRESTAdaptor) UpdateDish(c *gin.Context) {
+	ctx := c.Request.Context()
+	claim, ok := authentication.LoginClaimFromGinContext(c)
 	if !ok {
-		log.Ctx(r.Context()).Warn().Msg("no login claim in context")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		log.Ctx(ctx).Warn().Msg("no login claim in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	id := mux.Vars(r)["id"]
+	id := c.Param("id")
 
 	var request UpdateDishRESTRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to decode update dish request")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("failed to decode update dish request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := a.service.UpdateDish(r.Context(), UpdateDishRequest{
+	resp, err := a.service.UpdateDish(ctx, UpdateDishRequest{
 		UserID:      claim.UserID,
 		ID:          id,
 		Name:        request.Name,
@@ -208,34 +200,32 @@ func (a *DishServiceRESTAdaptor) UpdateDish(w http.ResponseWriter, r *http.Reque
 		Image:       request.Image,
 	})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to update dish")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to update dish")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(UpdateDishRESTResponse{Dish: resp.Dish})
+	c.JSON(http.StatusOK, UpdateDishRESTResponse{Dish: resp.Dish})
 }
 
 // DeleteDish
 
-func (a *DishServiceRESTAdaptor) DeleteDish(w http.ResponseWriter, r *http.Request) {
-	claim, ok := authentication.LoginClaimFromContext(r.Context())
+func (a *DishServiceRESTAdaptor) DeleteDish(c *gin.Context) {
+	ctx := c.Request.Context()
+	claim, ok := authentication.LoginClaimFromGinContext(c)
 	if !ok {
-		log.Ctx(r.Context()).Warn().Msg("no login claim in context")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		log.Ctx(ctx).Warn().Msg("no login claim in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	id := mux.Vars(r)["id"]
+	id := c.Param("id")
 
-	if err := a.service.DeleteDish(r.Context(), DeleteDishRequest{UserID: claim.UserID, ID: id}); err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to delete dish")
-		errs.WriteHTTPError(w, err)
+	if err := a.service.DeleteDish(ctx, DeleteDishRequest{UserID: claim.UserID, ID: id}); err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("failed to delete dish")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	c.Status(http.StatusNoContent)
 }

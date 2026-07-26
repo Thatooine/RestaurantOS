@@ -14,7 +14,7 @@ import (
 
 // defaultRootPassword is used when BOOTSTRAP_ROOT_PASSWORD is not set. It is for
 // local development only.
-const defaultRootPassword = "rootpassword"
+const defaultRootPassword = "abc123"
 
 func createRootUser(ctx context.Context, client *mongo.Client) {
 	collection := client.Database("restaurantos").Collection("users")

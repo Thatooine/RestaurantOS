@@ -1,51 +1,52 @@
 package authentication
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
-type contextKey string
+type ginContextKey string
 
-const loginClaimContextKey contextKey = "loginClaim"
+const loginClaimContextKey ginContextKey = "loginClaim"
 
-// NewAuthMiddleware returns a gorilla/mux-compatible middleware that checks for
-// an access token in the Authorization header ("Bearer <token>") or in a cookie
-// named "access_token". If a valid token is found, the decoded LoginClaim is
-// stored in the request context and the next handler is called. Otherwise it
-// responds with 401 Unauthorized.
-func NewAuthMiddleware(validator AccessTokenValidator) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := extractToken(r)
-			if token == "" {
-				log.Ctx(r.Context()).Warn().Msg("no access token found in request")
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-				return
-			}
+// NewAuthMiddleware checks for an access token in the Authorization header
+// ("Bearer <token>") or in the "access_token" cookie. Valid claims are stored
+// in Gin context for authenticated handlers.
+func NewAuthMiddleware(validator AccessTokenValidator) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+		token := extractToken(c.Request)
+		if token == "" {
+			log.Ctx(ctx).Warn().Msg("no access token found in request")
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
 
-			resp, err := validator.ValidateAccessToken(r.Context(), ValidateAccessTokenRequest{
-				AccessToken: token,
-			})
-			if err != nil {
-				log.Ctx(r.Context()).Warn().Err(err).Msg("access token validation failed")
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), loginClaimContextKey, resp.LoginClaim)
-			next.ServeHTTP(w, r.WithContext(ctx))
+		resp, err := validator.ValidateAccessToken(ctx, ValidateAccessTokenRequest{
+			AccessToken: token,
 		})
+		if err != nil {
+			log.Ctx(ctx).Warn().Err(err).Msg("access token validation failed")
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+
+		c.Set(loginClaimContextKey, resp.LoginClaim)
+		c.Next()
 	}
 }
 
-// LoginClaimFromContext retrieves the LoginClaim stored by the auth middleware.
+// LoginClaimFromGinContext retrieves the LoginClaim stored in Gin context.
 // Returns the claim and true if present, or a zero value and false otherwise.
-func LoginClaimFromContext(ctx context.Context) (LoginClaim, bool) {
-	claim, ok := ctx.Value(loginClaimContextKey).(LoginClaim)
+func LoginClaimFromGinContext(c *gin.Context) (LoginClaim, bool) {
+	value, exists := c.Get(loginClaimContextKey)
+	if !exists {
+		return LoginClaim{}, false
+	}
+	claim, ok := value.(LoginClaim)
 	return claim, ok
 }
 

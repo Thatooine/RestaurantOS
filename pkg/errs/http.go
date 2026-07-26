@@ -1,29 +1,27 @@
 package errs
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
-// WriteHTTPError inspects the error against sentinel values and writes the
-// appropriate HTTP status code and JSON error body. Falls back to 500 for
-// unknown errors.
-func WriteHTTPError(w http.ResponseWriter, err error) {
-	w.Header().Set("Content-Type", "application/json")
-
-	var status int
+// HTTPStatus maps application sentinel errors to their public HTTP status.
+func HTTPStatus(err error) int {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		status = http.StatusNotFound
+		return http.StatusNotFound
 	case errors.Is(err, ErrForbidden):
-		status = http.StatusForbidden
+		return http.StatusForbidden
 	case errors.Is(err, ErrConflict):
-		status = http.StatusConflict
+		return http.StatusConflict
 	default:
-		status = http.StatusInternalServerError
+		return http.StatusInternalServerError
 	}
+}
 
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+// WriteGinError writes the API's standard JSON error response.
+func WriteGinError(c *gin.Context, err error) {
+	c.JSON(HTTPStatus(err), gin.H{"error": err.Error()})
 }

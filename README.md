@@ -1,26 +1,28 @@
-# RestaurantOS
+# The Shire Shack
 
 ## Introduction
 
-A restaurant management platform built with Go (REST API) and React (SPA frontend). Restaurant owners can register their establishment, manage dishes, and collect customer ratings. Customers can browse, search, and rate dishes.
+A restaurant-management REST API built with Go and Gin. Restaurant owners can register an establishment and manage dishes; authenticated customers can browse, search, and rate dishes.
+
+The backend uses Gin `v1.12.0`. The completed [Gorilla Mux to Gin migration plan](docs/gin-migration-plan.md) records the compatibility decisions and verification criteria.
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Go](https://go.dev/dl/) 1.25+
-- [Node.js](https://nodejs.org/) 18+ and [Yarn](https://yarnpkg.com/) (`npm install -g yarn`)
+- [Go](https://go.dev/dl/) 1.25.7+
 - [Docker](https://www.docker.com/) and Docker Compose
+- `curl` for the startup health check
 
 ### One-Command Start
 
-To start the entire stack (infrastructure, bootstrap, API server, and UI) in one go:
+To start the infrastructure, bootstrap the database, and run the API server:
 
 ```shell
 ./scripts/start.sh
 ```
 
-This will start the infrastructure (MongoDB, Redis, RabbitMQ, Prometheus, Grafana), seed the database, launch the Go API on `:8080`, and the React UI on `:5173`. Press `Ctrl+C` to stop everything.
+This starts the Docker Compose services, replaces the local seed data, creates indexes, and launches the Go API on `:8080`. Press `Ctrl+C` to stop the API and the Compose services.
 
 ---
 
@@ -31,15 +33,18 @@ If you prefer to start each component manually, follow the steps below.
 From the project root, bring up the infrastructure:
 
 ```shell
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts:
+
 - MongoDB on `localhost:27017`, running as a single-node replica set (`rs0`) so multi-document transactions work. The replica set is initiated automatically by the container's healthcheck a few seconds after startup; clients connect with `?directConnection=true`.
 - Redis on `localhost:6379`
 - RabbitMQ on `localhost:5672` (management UI at `localhost:15672`, guest/guest)
 - Prometheus on `localhost:9090`
-- Grafana on `localhost:3000` (admin/admin; Prometheus datasource auto-provisioned)
+- Loki on `localhost:3100`
+- Grafana on `localhost:3001` (admin/admin; anonymous viewer access and Prometheus/Loki datasources are provisioned)
+- Grafana Alloy on `localhost:12345`, with OTLP gRPC on `localhost:4317` and OTLP HTTP on `localhost:4318`
 
 ### 2. Bootstrap the Database
 
@@ -49,7 +54,9 @@ Seed the database with a root user, a sample restaurant, and sample dishes, and 
 go run ./cmd/bootstrap
 ```
 
-This creates a **root user** for testing purposes:
+The bootstrap command clears the application collections before seeding them. Do not point the local configuration at data you need to retain.
+
+It creates this **root user** for testing:
 
 | Field | Value |
 |-------|-------|
@@ -58,7 +65,10 @@ This creates a **root user** for testing purposes:
 | ID | `00000000-0000-0000-0000-000000000000` |
 | Roles | Admin, RestaurantOwner |
 
-Expected output:
+Set `MONGO_URI` to bootstrap a non-default MongoDB instance. Set `BOOTSTRAP_ROOT_PASSWORD` to override the local default password shown above.
+
+Expected output includes:
+
 ```
 cleared users collection
 root user created: root+user@gmail.com (00000000-0000-0000-0000-000000000000)
@@ -85,30 +95,18 @@ The API starts on `http://localhost:8080`. Verify with:
 curl http://localhost:8080/health
 ```
 
-### 4. Start the Frontend
-
-In a separate terminal:
-
-```shell
-cd web
-yarn install
-yarn dev
-```
-
-The frontend starts on `http://localhost:5173` and proxies API calls to the backend.
-
 ## How It Works
 
 ### Architecture
 
 ```
-Browser (React SPA)
+HTTP Client
     |
-    | /api/v1/* (proxied by Vite in dev)
     v
-Go HTTP Server (gorilla/mux)
+Go HTTP Server (Gin)
     |
     |-- Logger Middleware
+    |-- Prometheus Metrics Middleware
     |-- Auth Middleware (app-issued JWT)
     |-- User Rate Limiter Middleware (Redis token bucket, per-user)
     |
@@ -163,10 +161,12 @@ MongoDB          Redis
 
 - The API authenticates users by email/password and issues its own JWT
 - The token can be provided in two ways:
-  - **Cookie:** `access_token` (set automatically by the login/register endpoints as an HttpOnly cookie)
-  - **Header:** `Authorization: Bearer <token>`
+  - **Header:** `Authorization: Bearer <token>`; the login endpoint returns the token in its JSON body
+  - **Cookie:** `access_token`; the registration endpoint sets it as a `Secure`, `HttpOnly`, `SameSite=Strict` cookie
 - All authenticated routes validate the JWT via middleware
 - The middleware checks the `Authorization` header first, then falls back to the cookie
+
+Because the registration cookie is `Secure`, most clients will not send it over local plain HTTP. For local development, log in and use the returned bearer token.
 
 ### Authorization
 
@@ -179,11 +179,13 @@ MongoDB          Redis
 Two layers of rate limiting, both Redis-backed token buckets (via `mennanov/limiters`):
 
 **User Rate Limiter** (`UserRateLimiterMiddleware`)
+
 - Per-user, keyed by UserID from the JWT
 - Applied to all authenticated routes
 - Default: 20 requests burst, 1 token/second refill
 
 **IP Rate Limiter** (`IpRateLimiterMiddleware`)
+
 - Per-IP, keyed by client IP address
 - Applied to `/api/v1/auth/login` only
 - Default: 5 requests burst, 1 token/minute refill
@@ -199,14 +201,28 @@ The API exposes Prometheus metrics at `/metrics`, recorded by middleware in `pkg
 | `http_request_duration_seconds` | Histogram | `method`, `route` |
 | `http_requests_in_flight` | Gauge | — |
 
-The `route` label uses the gorilla/mux path template (e.g. `/api/v1/dishes/{id}`) to keep cardinality bounded.
+The `route` label uses a canonical path template (for example, `/api/v1/dishes/{id}`) to keep cardinality bounded. Gin's native `:id` and `:email` parameters are normalized to the canonical brace format so existing Prometheus series remain backward compatible.
 
-Prometheus scrapes the API every 15s (config in `observability/prometheus/prometheus.yml`); targets are visible at http://localhost:9090/targets. Grafana (http://localhost:3000) has the Prometheus datasource auto-provisioned via `observability/grafana/provisioning/`.
+Prometheus scrapes the API every 15 seconds using `observability/prometheus/prometheus.yml`; targets are visible at <http://localhost:9090/targets>. Grafana is available at <http://localhost:3001>.
 
 ## Running Tests
 
+Run the unit tests and compile every package without starting external services:
+
 ```shell
-go test ./... -v
+go test -short ./...
+```
+
+For integration tests, start and bootstrap the local stack in one terminal:
+
+```shell
+./scripts/start.sh
+```
+
+Then run the API integration suite in another terminal:
+
+```shell
+go test ./tests/integration -v
 ```
 
 ## Project Structure
@@ -215,6 +231,8 @@ go test ./... -v
 cmd/
   app/              # API server entry point and wiring
   bootstrap/        # Database seed and index creation
+docs/
+  gin-migration-plan.md
 internal/pkg/       # Private service implementations
   authentication/   # JWT issuance & validation, email/password auth
   rateLimiting/     # Redis rate limiter implementation
@@ -229,10 +247,8 @@ pkg/                # Public interfaces and adaptors
   rateLimiting/     # Rate limiter interfaces, middleware
   restaurants/      # Restaurant/dish/rating interfaces, REST adaptors
   users/            # User interfaces, REST adaptors
-web/                # React frontend (Vite + TypeScript)
-  src/api/          # API client layer
-  src/components/   # UI components
-  src/context/      # Auth context provider
-  src/hooks/        # Custom React hooks
-  src/pages/        # Page components
+api/                # Postman collection
+observability/      # Prometheus, Grafana, Loki, and Alloy configuration
+scripts/            # Local stack orchestration
+tests/integration/  # Live API and Redis-backed integration tests
 ```

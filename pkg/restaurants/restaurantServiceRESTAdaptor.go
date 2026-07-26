@@ -1,13 +1,12 @@
 package restaurants
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/authentication"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/errs"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
@@ -23,25 +22,23 @@ func NewRestaurantServiceRESTAdaptor(service RestaurantService) *RestaurantServi
 
 // GetMyRestaurant
 
-func (a *RestaurantServiceRESTAdaptor) GetMyRestaurant(w http.ResponseWriter, r *http.Request) {
-	claim, ok := authentication.LoginClaimFromContext(r.Context())
+func (a *RestaurantServiceRESTAdaptor) GetMyRestaurant(c *gin.Context) {
+	ctx := c.Request.Context()
+	claim, ok := authentication.LoginClaimFromGinContext(c)
 	if !ok {
-		log.Ctx(r.Context()).Warn().Msg("no login claim in context")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		log.Ctx(ctx).Warn().Msg("no login claim in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
-	resp, err := a.service.GetMyRestaurant(r.Context(), GetMyRestaurantRequest{OwnerID: claim.UserID})
+	resp, err := a.service.GetMyRestaurant(ctx, GetMyRestaurantRequest{OwnerID: claim.UserID})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get my restaurant")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to get my restaurant")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(GetRestaurantRESTResponse{Restaurant: resp.Restaurant})
+	c.JSON(http.StatusOK, GetRestaurantRESTResponse{Restaurant: resp.Restaurant})
 }
 
 // GetRestaurant
@@ -50,18 +47,18 @@ type GetRestaurantRESTResponse struct {
 	Restaurant Restaurant `json:"restaurant"`
 }
 
-func (a *RestaurantServiceRESTAdaptor) GetRestaurant(w http.ResponseWriter, r *http.Request) {
-	id := mux.Vars(r)["id"]
+func (a *RestaurantServiceRESTAdaptor) GetRestaurant(c *gin.Context) {
+	ctx := c.Request.Context()
+	id := c.Param("id")
 
-	resp, err := a.service.GetRestaurant(r.Context(), GetRestaurantRequest{ID: id})
+	resp, err := a.service.GetRestaurant(ctx, GetRestaurantRequest{ID: id})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get restaurant")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to get restaurant")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(GetRestaurantRESTResponse{Restaurant: resp.Restaurant})
+	c.JSON(http.StatusOK, GetRestaurantRESTResponse{Restaurant: resp.Restaurant})
 }
 
 // ListRestaurants
@@ -71,8 +68,9 @@ type ListRestaurantsRESTResponse struct {
 	Total       int64        `json:"total"`
 }
 
-func (a *RestaurantServiceRESTAdaptor) ListRestaurants(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (a *RestaurantServiceRESTAdaptor) ListRestaurants(c *gin.Context) {
+	ctx := c.Request.Context()
+	query := c.Request.URL.Query()
 	offset, _ := strconv.Atoi(query.Get("offset"))
 	limit, _ := strconv.Atoi(query.Get("limit"))
 
@@ -80,18 +78,17 @@ func (a *RestaurantServiceRESTAdaptor) ListRestaurants(w http.ResponseWriter, r 
 		limit = 20
 	}
 
-	resp, err := a.service.ListRestaurants(r.Context(), ListRestaurantsRequest{
+	resp, err := a.service.ListRestaurants(ctx, ListRestaurantsRequest{
 		Offset: offset,
 		Limit:  limit,
 	})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to list restaurants")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to list restaurants")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ListRestaurantsRESTResponse{
+	c.JSON(http.StatusOK, ListRestaurantsRESTResponse{
 		Restaurants: resp.Restaurants,
 		Total:       resp.Total,
 	})
@@ -104,8 +101,9 @@ type SearchRestaurantsRESTResponse struct {
 	Total       int64        `json:"total"`
 }
 
-func (a *RestaurantServiceRESTAdaptor) SearchRestaurants(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (a *RestaurantServiceRESTAdaptor) SearchRestaurants(c *gin.Context) {
+	ctx := c.Request.Context()
+	query := c.Request.URL.Query()
 	q := query.Get("q")
 	offset, _ := strconv.Atoi(query.Get("offset"))
 	limit, _ := strconv.Atoi(query.Get("limit"))
@@ -115,20 +113,19 @@ func (a *RestaurantServiceRESTAdaptor) SearchRestaurants(w http.ResponseWriter, 
 	}
 
 	resp, err := a.service.SearchRestaurants(
-		r.Context(),
+		ctx,
 		SearchRestaurantsRequest{
 			Query:  q,
 			Offset: offset,
 			Limit:  limit,
 		})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to search restaurants")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to search restaurants")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SearchRestaurantsRESTResponse{
+	c.JSON(http.StatusOK, SearchRestaurantsRESTResponse{
 		Restaurants: resp.Restaurants,
 		Total:       resp.Total,
 	})

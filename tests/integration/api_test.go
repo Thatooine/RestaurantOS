@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/redis/go-redis/v9"
@@ -123,7 +125,85 @@ func TestLoginAndListDishes(t *testing.T) {
 		}
 	}
 
+	const seededDishID = "00000000-0000-0000-0000-000000000101"
+	getRequest, err := http.NewRequest(http.MethodGet, baseURL()+"/api/v1/dishes/"+seededDishID, nil)
+	if err != nil {
+		t.Fatalf("failed to create get dish request: %v", err)
+	}
+	getRequest.Header.Set("Authorization", "Bearer "+token)
+
+	getResponse, err := http.DefaultClient.Do(getRequest)
+	if err != nil {
+		t.Fatalf("failed to send get dish request: %v", err)
+	}
+	defer getResponse.Body.Close()
+	if getResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200 on get dish, got %d", getResponse.StatusCode)
+	}
+
+	metricsResponse, err := http.Get(baseURL() + "/metrics")
+	if err != nil {
+		t.Fatalf("failed to fetch metrics: %v", err)
+	}
+	defer metricsResponse.Body.Close()
+	metricsBody, err := io.ReadAll(metricsResponse.Body)
+	if err != nil {
+		t.Fatalf("failed to read metrics: %v", err)
+	}
+	metrics := string(metricsBody)
+	if !strings.Contains(metrics, `http_requests_total{method="GET",route="/api/v1/dishes/{id}",status="200"}`) {
+		t.Fatal("metrics do not contain the canonical parameterized dish route label")
+	}
+	if strings.Contains(metrics, `route="/api/v1/dishes/`+seededDishID+`"`) || strings.Contains(metrics, `route="/api/v1/dishes/:id"`) {
+		t.Fatal("metrics contain a concrete or Gin-native dish route label")
+	}
+
 	t.Logf("listed %d dishes (total: %d)", len(dishesResp.Dishes), dishesResp.Total)
+}
+
+func TestRouterHTTPContract(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "health", method: http.MethodGet, path: "/health", wantStatus: http.StatusOK, wantBody: `{"status":"ok"}`},
+		{name: "trailing slash is not redirected", method: http.MethodGet, path: "/health/", wantStatus: http.StatusNotFound, wantBody: "404 page not found\n"},
+		{name: "wrong method", method: http.MethodPost, path: "/health", wantStatus: http.StatusMethodNotAllowed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request, err := http.NewRequest(tt.method, baseURL()+tt.path, nil)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			response, err := http.DefaultClient.Do(request)
+			if err != nil {
+				t.Fatalf("failed to send request: %v", err)
+			}
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatalf("failed to read response: %v", err)
+			}
+			if response.StatusCode != tt.wantStatus {
+				t.Fatalf("status: got %d, want %d", response.StatusCode, tt.wantStatus)
+			}
+			if string(body) != tt.wantBody {
+				t.Fatalf("body: got %q, want %q", string(body), tt.wantBody)
+			}
+			if allow := response.Header.Get("Allow"); allow != "" {
+				t.Fatalf("unexpected Allow header: %q", allow)
+			}
+		})
+	}
 }
 
 func redisAddr() string {
@@ -142,7 +222,9 @@ func flushIPRateLimitKeys(t *testing.T) {
 	defer rdb.Close()
 
 	ctx := context.Background()
-	keys, err := rdb.Keys(ctx, "ip_token_bucket:*").Result()
+	// mennanov/limiters wraps the configured key in a Redis hash-tag and adds a
+	// state suffix, for example: {ip_token_bucket:::1}state.
+	keys, err := rdb.Keys(ctx, "{ip_token_bucket:*").Result()
 	if err != nil {
 		t.Fatalf("failed to scan Redis for IP rate limit keys: %v", err)
 	}
@@ -221,7 +303,9 @@ func flushUserRateLimitKeys(t *testing.T) {
 	defer rdb.Close()
 
 	ctx := context.Background()
-	keys, err := rdb.Keys(ctx, "token_bucket:*").Result()
+	// mennanov/limiters wraps the configured key in a Redis hash-tag and adds a
+	// state suffix, for example: {token_bucket:user-id}state.
+	keys, err := rdb.Keys(ctx, "{token_bucket:*").Result()
 	if err != nil {
 		t.Fatalf("failed to scan Redis for user rate limit keys: %v", err)
 	}

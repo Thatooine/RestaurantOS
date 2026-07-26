@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -11,11 +12,12 @@ import (
 )
 
 const databaseName = "restaurantos"
+const defaultMongoURI = "mongodb://localhost:27017/?directConnection=true"
 
 func main() {
 	ctx := context.Background()
 
-	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://localhost:27017/?directConnection=true"))
+	client, err := mongo.Connect(options.Client().ApplyURI(getMongoURI()))
 	if err != nil {
 		log.Fatalf("failed to connect to mongo: %v", err)
 	}
@@ -28,6 +30,14 @@ func main() {
 	createRootUser(ctx, client)
 	seedDishesAndRestaurant(ctx, client)
 	ensureIndexes(ctx, client)
+}
+
+func getMongoURI() string {
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		return defaultMongoURI
+	}
+	return mongoURI
 }
 
 func ensureIndexes(ctx context.Context, client *mongo.Client) {

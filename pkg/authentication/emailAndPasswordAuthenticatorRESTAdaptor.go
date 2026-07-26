@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
@@ -35,31 +36,26 @@ type EmailAndPasswordLoginRESTResponse struct {
 }
 
 // Login handles POST requests to authenticate a user with email and password.
-func (a *EmailAndPasswordAuthenticatorRESTAdaptor) Login(w http.ResponseWriter, r *http.Request) {
+func (a *EmailAndPasswordAuthenticatorRESTAdaptor) Login(c *gin.Context) {
+	ctx := c.Request.Context()
 	var request EmailAndPasswordLoginRESTRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to decode login request")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("failed to decode login request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := a.authenticator.AuthenticateWithEmailAndPassword(r.Context(), EmailAndPasswordAuthRequest{
+	resp, err := a.authenticator.AuthenticateWithEmailAndPassword(ctx, EmailAndPasswordAuthRequest{
 		Email:    request.Email,
 		Password: request.Password,
 	})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to authenticate with email and password")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
+		log.Ctx(ctx).Error().Err(err).Msg("failed to authenticate with email and password")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(EmailAndPasswordLoginRESTResponse{
+	c.JSON(http.StatusOK, EmailAndPasswordLoginRESTResponse{
 		Token:  resp.Token,
 		UserID: resp.UserID,
 		Email:  resp.Email,

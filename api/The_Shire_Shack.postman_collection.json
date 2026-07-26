@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "The Shire Shack API",
-		"description": "Postman collection for The Shire Shack REST API (v1).\n\nThe API is served at `http://localhost:8080`. Most endpoints under `/api/v1` require authentication via a Bearer token (`Authorization: Bearer <token>`) or the `access_token` cookie.\n\n## Getting started\n1. Run **Auth > Register (email & password)** or **Auth > Login (email & password)**. A test script automatically stores the returned `token` in the `token` collection variable.\n2. All authenticated requests use that `token` via collection-level Bearer auth.\n\n## Variables\n- `baseUrl` — API base URL (default `http://localhost:8080`)\n- `token` — access token, set automatically by login/register\n- `restaurantId`, `dishId`, `userEmail` — convenience placeholders for path params",
+		"description": "Postman collection for The Shire Shack REST API (v1).\n\nThe API is served at `http://localhost:8080`. Most endpoints under `/api/v1` require authentication via a Bearer token (`Authorization: Bearer <token>`) or the `access_token` cookie.\n\n## Getting started\n1. If needed, run **Auth > Register (email & password)** to create a user. Registration returns `{userID, email}` and sets a Secure, HttpOnly cookie; it does not return a token in the response body.\n2. Run **Auth > Login (email & password)**. Its test script stores the returned token in the `token` collection variable.\n3. Authenticated requests use that token via collection-level Bearer auth.\n\n## Variables\n- `baseUrl` — API base URL (default `http://localhost:8080`)\n- `token` — access token, set automatically by login\n- `restaurantId`, `dishId`, `userEmail` — convenience placeholders for path parameters",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -82,20 +82,6 @@
 			"item": [
 				{
 					"name": "Register (email & password)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"if (pm.response.code === 201) {",
-									"    var json = pm.response.json();",
-									"    if (json.token) { pm.collectionVariables.set('token', json.token); }",
-									"}"
-								]
-							}
-						}
-					],
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "POST",
@@ -111,28 +97,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "auth", "register"]
 						},
-						"description": "Register a new user with email and password. On success returns 201 with `{userID, email}` and sets an `access_token` cookie. The test script stores the token if present in the body."
-					},
-					"response": []
-				},
-				{
-					"name": "Register (firebase token)",
-					"request": {
-						"auth": { "type": "noauth" },
-						"method": "POST",
-						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"name\": \"Frodo Baggins\",\n    \"firebaseToken\": \"<firebase-id-token>\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/auth/register/firebase",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "auth", "register", "firebase"]
-						},
-						"description": "Register a new user with a Firebase ID token. Returns 201 with `{userID, email}` and sets an `access_token` cookie."
+						"description": "Register a new user with email and password. On success returns 201 with `{userID, email}` and sets a Secure, HttpOnly, SameSite=Strict `access_token` cookie. The response body does not contain a token."
 					},
 					"response": []
 				},
@@ -167,28 +132,7 @@
 							"host": ["{{baseUrl}}"],
 							"path": ["api", "v1", "auth", "login"]
 						},
-						"description": "Authenticate with email and password. Rate limited by IP (5/min). Returns `{token, userID, email}`. The test script stores `token` in the collection variable."
-					},
-					"response": []
-				},
-				{
-					"name": "Login (firebase token)",
-					"request": {
-						"auth": { "type": "noauth" },
-						"method": "POST",
-						"header": [
-							{ "key": "Content-Type", "value": "application/json" }
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"firebaseToken\": \"<firebase-id-token>\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/auth/firebase",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "auth", "firebase"]
-						},
-						"description": "Authenticate with a Firebase ID token. Returns `{userID, email}` and sets an `access_token` HTTP-only cookie."
+						"description": "Authenticate with email and password. The IP token bucket allows a burst of 5 requests and refills 1 token per minute. Returns `{token, userID, email}`. The test script stores `token` in the collection variable."
 					},
 					"response": []
 				}

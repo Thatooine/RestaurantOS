@@ -1,12 +1,11 @@
 package users
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/errs"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
@@ -26,19 +25,18 @@ type GetUserRESTResponse struct {
 	User User `json:"user"`
 }
 
-func (a *UserServiceRESTAdaptor) GetUser(w http.ResponseWriter, r *http.Request) {
-	email := mux.Vars(r)["email"]
+func (a *UserServiceRESTAdaptor) GetUser(c *gin.Context) {
+	ctx := c.Request.Context()
+	email := c.Param("email")
 
-	resp, err := a.service.GetUser(r.Context(), GetUserRequest{Email: email})
+	resp, err := a.service.GetUser(ctx, GetUserRequest{Email: email})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to get user")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to get user")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(GetUserRESTResponse{User: resp.User})
+	c.JSON(http.StatusOK, GetUserRESTResponse{User: resp.User})
 }
 
 // ListUsers
@@ -48,8 +46,9 @@ type ListUsersRESTResponse struct {
 	Total int64  `json:"total"`
 }
 
-func (a *UserServiceRESTAdaptor) ListUsers(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (a *UserServiceRESTAdaptor) ListUsers(c *gin.Context) {
+	ctx := c.Request.Context()
+	query := c.Request.URL.Query()
 	offset, _ := strconv.Atoi(query.Get("offset"))
 	limit, _ := strconv.Atoi(query.Get("limit"))
 
@@ -57,19 +56,17 @@ func (a *UserServiceRESTAdaptor) ListUsers(w http.ResponseWriter, r *http.Reques
 		limit = 20
 	}
 
-	resp, err := a.service.ListUsers(r.Context(), ListUsersRequest{
+	resp, err := a.service.ListUsers(ctx, ListUsersRequest{
 		Offset: offset,
 		Limit:  limit,
 	})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to list users")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to list users")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(ListUsersRESTResponse{
+	c.JSON(http.StatusOK, ListUsersRESTResponse{
 		Users: resp.Users,
 		Total: resp.Total,
 	})
@@ -82,8 +79,9 @@ type SearchUsersRESTResponse struct {
 	Total int64  `json:"total"`
 }
 
-func (a *UserServiceRESTAdaptor) SearchUsers(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (a *UserServiceRESTAdaptor) SearchUsers(c *gin.Context) {
+	ctx := c.Request.Context()
+	query := c.Request.URL.Query()
 	q := query.Get("q")
 	offset, _ := strconv.Atoi(query.Get("offset"))
 	limit, _ := strconv.Atoi(query.Get("limit"))
@@ -93,21 +91,19 @@ func (a *UserServiceRESTAdaptor) SearchUsers(w http.ResponseWriter, r *http.Requ
 	}
 
 	resp, err := a.service.SearchUsers(
-		r.Context(),
+		ctx,
 		SearchUsersRequest{
 			Query:  q,
 			Offset: offset,
 			Limit:  limit,
 		})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to search users")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to search users")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(SearchUsersRESTResponse{
+	c.JSON(http.StatusOK, SearchUsersRESTResponse{
 		Users: resp.Users,
 		Total: resp.Total,
 	})

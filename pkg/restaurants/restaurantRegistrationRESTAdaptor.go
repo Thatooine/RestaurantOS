@@ -6,6 +6,7 @@ import (
 
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/authentication"
 	"github.com/bash/the-dancing-pony-v2-rnyfbr/pkg/errs"
+	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
@@ -29,38 +30,33 @@ type RegisterRestaurantRESTResponse struct {
 	Restaurant Restaurant `json:"restaurant"`
 }
 
-func (a *RestaurantRegistrationRESTAdaptor) RegisterRestaurant(w http.ResponseWriter, r *http.Request) {
-	claim, ok := authentication.LoginClaimFromContext(r.Context())
+func (a *RestaurantRegistrationRESTAdaptor) RegisterRestaurant(c *gin.Context) {
+	ctx := c.Request.Context()
+	claim, ok := authentication.LoginClaimFromGinContext(c)
 	if !ok {
-		log.Ctx(r.Context()).Warn().Msg("no login claim in context")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		log.Ctx(ctx).Warn().Msg("no login claim in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
 
 	var request RegisterRestaurantRESTRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to decode register restaurant request")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	if err := json.NewDecoder(c.Request.Body).Decode(&request); err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("failed to decode register restaurant request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := a.registrar.RegisterRestaurant(r.Context(), RegisterRestaurantRequest{
+	resp, err := a.registrar.RegisterRestaurant(ctx, RegisterRestaurantRequest{
 		UserID: claim.UserID,
 		Name:   request.Name,
 		City:   request.City,
 		Image:  request.Image,
 	})
 	if err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("failed to register restaurant")
-		errs.WriteHTTPError(w, err)
+		log.Ctx(ctx).Error().Err(err).Msg("failed to register restaurant")
+		errs.WriteGinError(c, err)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(RegisterRestaurantRESTResponse{Restaurant: resp.Restaurant})
+	c.JSON(http.StatusCreated, RegisterRestaurantRESTResponse{Restaurant: resp.Restaurant})
 }
